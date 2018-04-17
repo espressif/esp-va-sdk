@@ -31,7 +31,7 @@ Make note of the following parameters. You'll need these in subsequent step.
 
 **Important:** Make sure to set **Allowed Return URLs** under **Security Profile > Web** to below value. ![Allowed Origin and Return URL](./doc/images/origin-and-returnURL.png)
 * **Allowed Origins:** _could be left blank_
-* **Allowed Return URLs:** https://espressif.github.io/esp-avs-sdk/accesstoken.html
+* **Allowed Return URLs:** `https://espressif.github.io/esp-avs-sdk/accesstoken.html`
 
 ## Device Provisioning
 
