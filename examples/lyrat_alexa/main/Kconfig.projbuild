@@ -1,0 +1,17 @@
+menu "Example Configuration"
+
+config USE_POP
+       bool "Use Proof-of-possession"
+       default n
+       help
+            If to use proof-of-possession. Only supported for security1
+
+config POP
+        string "proof-of-possession"
+        depends on USE_POP
+        default ""
+        help
+            proof of possession, which indicates that
+            owner has physical access to the device
+endmenu
+
