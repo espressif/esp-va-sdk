@@ -30,7 +30,7 @@ $ make -j 8 flash monitor
 ```
 
 # Device Configuration
-Please use the android app available [here](https://github.com/espressif/esp-avs-sdk/wiki/Android-app-APK) to configure the WIFI credentials and to associate Amazon Login with the device.
+Please use the latest android app available under Release artifacts to configure the WIFI credentials and to associate Amazon Login with the device.
 
 # Enabling AWS [Optional]
 To Enabling AWS IoT platform on ESP32 follow below steps:

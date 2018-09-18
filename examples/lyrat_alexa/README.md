@@ -30,7 +30,7 @@ $ make -j 8 flash monitor
 ```
 
 # Device Configuration
-Please use the android app available [here](https://github.com/espressif/esp-avs-sdk/wiki/Android-app-APK) to configure the WIFI credentials and to associate Amazon Login with the device.
+Please use the latest android app available under Release artifacts to configure the WIFI credentials and to associate Amazon Login with the device.
 
 # Demo
 * Once the board boots up and successfully connects to the Wi-Fi network after provisioning, you can use "Rec" button on LyraT board for conversation. For Tap-to-Talk, press and release the button and speak. The green LED glows when the microphone is active.
