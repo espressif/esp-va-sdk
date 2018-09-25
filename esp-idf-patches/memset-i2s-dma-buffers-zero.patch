@@ -1,0 +1,16 @@
+diff --git a/components/driver/i2s.c b/components/driver/i2s.c
+index 65b83c9..233e05e 100644
+--- a/components/driver/i2s.c
++++ b/components/driver/i2s.c
+@@ -499,6 +499,8 @@ static void IRAM_ATTR i2s_intr_handler_default(void *arg)
+ 
+     if (i2s_reg->int_st.out_eof && p_i2s->tx) {
+         finish_desc = (lldesc_t*) i2s_reg->out_eof_des_addr;
++
++        memset(finish_desc->buf, 0, finish_desc->size);
+         // All buffers are empty. This means we have an underflow on our hands.
+         if (xQueueIsQueueFullFromISR(p_i2s->tx->queue)) {
+             xQueueReceiveFromISR(p_i2s->tx->queue, &dummy, &high_priority_task_awoken);
+-- 
+2.7.4
+

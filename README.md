@@ -24,5 +24,6 @@ The SDK can easily be extended to other ESP32 based audio platforms that have SP
 
 ## Getting started
 
+* SDK is designed to work with esp-idf 3.1 release. However, there are some changes needed in the IDF in order for the Alexa application to work. Please check esp-idf-patches directory for additional patches on top of esp-idf 3.1 release.
 * When flashing the SDK for the first time, it is recommended to do `make erase_flash` to wipe out entire flash and start out fresh.
 * Please refer to [LyraT README](examples/lyrat_alexa/README.md) to get started with flashing, provisioning and Alexa interactions.
