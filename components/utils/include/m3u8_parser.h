@@ -25,24 +25,9 @@
 #define _M3U8_PARSER_H_
 
 #include <esp_err.h>
-#include <rom/queue.h>
 #include <httpc.h>
+#include <http_playlist.h>
 
-typedef struct m3u8_media_segment_s m3u8_media_segment_t;
-
-struct  m3u8_media_segment_s {
-    char *uri;
-    STAILQ_ENTRY(m3u8_media_segment_s) entries;
-};
-
-typedef struct m3u8_playlist_ {
-    char *uri;
-    int total_entries;
-    STAILQ_HEAD(stailqhead, m3u8_media_segment_s) head;
-} m3u8_playlist_t;
-
-m3u8_playlist_t *m3u8_parse(httpc_conn_t *h, char *uri, int *offset_in_ms);
-esp_err_t m3u8_free(m3u8_playlist_t *playlist);
-char *m3u8_get_next_segment(m3u8_playlist_t *playlist);
+http_playlist_t *m3u8_parse(httpc_conn_t *h, int *offset_in_ms);
 
 #endif  /* _M3U8_PARSER_H_ */

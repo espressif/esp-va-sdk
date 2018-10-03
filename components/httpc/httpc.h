@@ -22,7 +22,7 @@
 extern "C" {
 #endif
 
-#define BUF_SIZE 50
+#define HTTPC_BUF_SIZE 50
 
 typedef enum {
     ESP_HTTP_GET,
@@ -46,7 +46,7 @@ typedef struct redirect_location {
 typedef void  (* httpc_response_header_cb)(const char *, const char *, void *arg);
 
 /* The maximum length of a header or value that we are interested in */
-#define MAX_HDR_VAL_LEN   50
+#define MAX_HDR_VAL_LEN   CONFIG_HTTP_CLIENT_MAX_HDR_VAL_LEN
 typedef struct httpc_conn {
     struct esp_tls *tls;
     bool is_tls;
@@ -87,6 +87,13 @@ typedef struct httpc_conn {
 httpc_conn_t *http_connection_new(const char *url);
 void http_connection_delete(httpc_conn_t *httpc);
 
+/* Renew existing session.
+ * Function deletes old request.
+ * Checks if old host is same as new. Deletes and creates new connection if hosts are different.
+ * Create new request and return connection handle.
+ */
+httpc_conn_t *http_renew_session(httpc_conn_t *httpc, httpc_ops_t op, const char *url);
+
 int http_request_new(httpc_conn_t *httpc, httpc_ops_t op, const char *url);
 void http_request_delete(httpc_conn_t *httpc);
 int http_header_fetch(httpc_conn_t *h);
@@ -119,7 +126,8 @@ static inline char *http_response_get_redirect_location(httpc_conn_t *httpc)
  * The httpc module will only prefix this with the request line.
  */
 int http_request_send_custom_hdr(httpc_conn_t *httpc, const char *hdr);
-
+int http_send_chunk(httpc_conn_t *httpc, const char *data, size_t data_len);
+int http_send_last_chunk(httpc_conn_t *httpc);
 
 #ifdef __cplusplus
 }

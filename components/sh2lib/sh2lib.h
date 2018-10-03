@@ -259,4 +259,14 @@ int sh2lib_do_get_with_nv(struct sh2lib_handle *hd, const nghttp2_nv *nva, size_
 int sh2lib_do_putpost_with_nv(struct sh2lib_handle *hd, const nghttp2_nv *nva, size_t nvlen,
                               nghttp2_data_source_read_callback data_prd,
                               void *arg);
+
+/**
+ * @brief Resume any deferred POST data
+ *
+ * This API resumes sending POST data deferred by the application by returning NGHTTP2_ERR_DEFERRED from the data provider callback.
+ *
+ * @param[in] hd        Pointer to a variable of the type 'struct sh2lib_handle'
+ * @param[in] stream_id Stream ID on which to resume sending the data
+ */
+int sh2lib_resume_deferred_data(struct sh2lib_handle *hd, int32_t stream_id);
 #endif /* ! __ESP_EXAMPLE_SH2_LIB_H_ */

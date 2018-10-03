@@ -477,6 +477,29 @@ int http_request_new(httpc_conn_t *httpc, httpc_ops_t op, const char *url)
     return 0;
 }
 
+httpc_conn_t *http_renew_session(httpc_conn_t *httpc, httpc_ops_t op, const char *url)
+{
+    /* Parse URI */
+    struct http_parser_url u = {0};
+    http_parser_parse_url(url, strlen(url), 0, &u);
+
+    http_request_delete(httpc); /* Delete previous request */
+
+    if (strncmp(httpc->host, url + u.field_data[UF_HOST].off, u.field_data[UF_HOST].len) ||
+            (httpc->is_tls != is_url_tls(url, &u))) { /* We need a new connection. */
+        http_connection_delete(httpc);
+        httpc = http_connection_new(url);
+        if (!httpc) {
+            return NULL;
+        }
+    }
+    if(http_request_new(httpc, op, url) < 0) {
+        http_connection_delete(httpc);
+        return NULL;
+    }
+    return httpc;
+}
+
 void http_request_delete(httpc_conn_t *httpc)
 {
     if (httpc->request.hdr_overflow_buf) {
@@ -565,8 +588,8 @@ int http_header_fetch(httpc_conn_t *httpc)
 {
     if (httpc->request.status < ESP_HTTP_RESP_STARTED) {
         httpc->request.status = ESP_HTTP_RESP_STARTED;
-        httpc->request.hdr_overflow_buf = (char *)malloc(BUF_SIZE);
-        int status =  header_parser(httpc, httpc->request.hdr_overflow_buf, BUF_SIZE);
+        httpc->request.hdr_overflow_buf = (char *)malloc(HTTPC_BUF_SIZE);
+        int status =  header_parser(httpc, httpc->request.hdr_overflow_buf, HTTPC_BUF_SIZE);
         if (status < 0) {
             return status;
         }
@@ -577,6 +600,39 @@ int http_header_fetch(httpc_conn_t *httpc)
             free(httpc->request.hdr_overflow_buf);
             httpc->request.hdr_overflow_buf = NULL;
         }
+    }
+    return 0;
+}
+
+int http_send_chunk(httpc_conn_t *httpc, const char *data, size_t data_len)
+{
+    char start_chunk[12];
+    int ret;
+    const char *cr_lf = "\r\n";
+    unsigned int chunk_len;
+
+    ret = snprintf(start_chunk, sizeof(start_chunk), "%x%s", (unsigned int)data_len, cr_lf);
+    if ((ret <= 0) || (ret >= sizeof(start_chunk))) {
+        return -1;
+    }
+    chunk_len = ret;
+    if (esp_tls_conn_write(httpc->tls, start_chunk, chunk_len) < 0) {
+        return -1;
+    }
+    if (esp_tls_conn_write(httpc->tls, data, data_len) < 0) {
+        return -1;
+    }
+    if (esp_tls_conn_write(httpc->tls, cr_lf, strlen(cr_lf)) < 0) {
+        return -1;
+    }
+    return 0;
+}
+
+int http_send_last_chunk(httpc_conn_t *httpc)
+{
+    const char *last_chunk = "0\r\n\r\n";
+    if (esp_tls_conn_write(httpc->tls, last_chunk, strlen(last_chunk)) < 0) {
+        return -1;
     }
     return 0;
 }

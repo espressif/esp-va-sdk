@@ -300,6 +300,11 @@ int sh2lib_wait_for_io(struct sh2lib_handle *hd, int timeout_s, int timeout_ms)
     return ret;
 }
 
+int sh2lib_resume_deferred_data(struct sh2lib_handle *hd, int32_t sid)
+{
+    return nghttp2_session_resume_data(hd->http2_sess, sid);
+}
+
 int sh2lib_execute(struct sh2lib_handle *hd)
 {
     int ret;
@@ -313,6 +318,7 @@ int sh2lib_execute(struct sh2lib_handle *hd)
         ESP_LOGE(TAG, "[sh2-execute] HTTP2 session recv failed %d", ret);
         return -1;
     }
+
     return 0;
 }
 

@@ -1,5 +1,30 @@
 ## ChangeLog
 
+### v1.0b1r4 (Beta) - 2018-09-28
+
+**Enhancements**
+
+* Support for PLS playlist parser
+* Support for Pandora music streaming service
+* TuneIn stations using PLS playlist format are now supported
+* LyraTD-MSC board support
+
+**API Changes**
+
+* Older http_stream.c/.h is now renamed to http_playback_stream.c/.h. All APIs starting with http_stream are renamed to http_playback_stream
+* http_stream.c/.h file now contains APIs which are useful to create a stream to POST data to cloud and receive response on the same connection and stream (optional)
+
+**Bug Fixes**
+
+* Stability related fixes
+* Fixed crashes seen in Audible when segments >512 are received
+
+**Known Issues/Improvements**
+
+* Only limited TuneIn radio stations are supported
+* It is largely tested with internet and WiFi connectivity intact throughout its operation. Some issues are seen when device loses connectivity.
+* TLS Certificate validation of Amazon and other streaming sites is yet to be done.
+
 ### v1.0b1r3 (Beta) - 2018-08-28
 
 **Enhancements**

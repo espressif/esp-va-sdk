@@ -22,49 +22,37 @@
  *
  */
 
+#ifndef _HTTP_PLAYLIST_H_
+#define _HTTP_PLAYLIST_H_
 
-#ifndef _HTTP_STREAM_H_
-#define _HTTP_STREAM_H_
-
-#include <audio_stream.h>
-#include "httpc.h"
 #include <unistd.h>
+#include <rom/queue.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-typedef struct http_stream_config {
-    char *url;
-    /* If set, this handle is used by the HTTP stream instead of creating a new HTTP connection */
-    httpc_conn_t *prev_conn_handle;
-    /* If true, the HTTP connection is kept open for the subsequent HTTP stream to use */
-    bool reuse_conn;
-} http_stream_config_t;
+typedef struct playlist_entry_s playlist_entry_t;
 
-typedef struct http_stream {
-    audio_stream_t base;
-    http_stream_config_t cfg;
+struct  playlist_entry_s {
+    char *uri;
+    STAILQ_ENTRY(playlist_entry_s) entries;
+};
 
-    /* Private members */
-    httpc_conn_t *handle;
-} http_stream_t;
+typedef struct http_playlist {
+    int total_entries;
+    STAILQ_HEAD(stailqhead, playlist_entry_s) head;
+} http_playlist_t;
 
-http_stream_t *http_stream_create_writer(http_stream_config_t *cfg);
-http_stream_t *http_stream_create_reader(http_stream_config_t *cfg);
+esp_err_t playlist_add_entry(http_playlist_t *playlist, char *line);
+esp_err_t playlist_free(http_playlist_t *playlist);
+char *playlist_get_next_entry(http_playlist_t *playlist);
 
-esp_err_t http_stream_destroy(http_stream_t *stream);
-esp_err_t http_stream_set_config(http_stream_t *stream, http_stream_config_t *cfg);
-void http_stream_set_stack_size(http_stream_t *stream, ssize_t stack_size);
-
-
-#define HTTP_STREAM_BUFFER_SIZE        (512)
-#define HTTP_STREAM_TASK_STACK_SIZE    10240
-#define HTTP_STREAM_TASK_PRIORITY      4
+int http_playlist_read_data(void *base_stream, void *buf, ssize_t len);
 
 #ifdef __cplusplus
 }
 #endif
 
 
-#endif /*_HTTP_STREAM_H_*/
+#endif /* _HTTP_PLAYLIST_H_ */

@@ -21,50 +21,13 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  */
+#ifndef _PLS_PARSER_H_
+#define _PLS_PARSER_H_
 
+#include <esp_err.h>
+#include <httpc.h>
+#include <http_playlist.h>
 
-#ifndef _HTTP_STREAM_H_
-#define _HTTP_STREAM_H_
+http_playlist_t *pls_parse(httpc_conn_t *h);
 
-#include <audio_stream.h>
-#include "httpc.h"
-#include <unistd.h>
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-typedef struct http_stream_config {
-    char *url;
-    /* If set, this handle is used by the HTTP stream instead of creating a new HTTP connection */
-    httpc_conn_t *prev_conn_handle;
-    /* If true, the HTTP connection is kept open for the subsequent HTTP stream to use */
-    bool reuse_conn;
-} http_stream_config_t;
-
-typedef struct http_stream {
-    audio_stream_t base;
-    http_stream_config_t cfg;
-
-    /* Private members */
-    httpc_conn_t *handle;
-} http_stream_t;
-
-http_stream_t *http_stream_create_writer(http_stream_config_t *cfg);
-http_stream_t *http_stream_create_reader(http_stream_config_t *cfg);
-
-esp_err_t http_stream_destroy(http_stream_t *stream);
-esp_err_t http_stream_set_config(http_stream_t *stream, http_stream_config_t *cfg);
-void http_stream_set_stack_size(http_stream_t *stream, ssize_t stack_size);
-
-
-#define HTTP_STREAM_BUFFER_SIZE        (512)
-#define HTTP_STREAM_TASK_STACK_SIZE    10240
-#define HTTP_STREAM_TASK_PRIORITY      4
-
-#ifdef __cplusplus
-}
-#endif
-
-
-#endif /*_HTTP_STREAM_H_*/
+#endif  /* _PLS_PARSER_H_ */

@@ -95,14 +95,18 @@ static void audio_stream_task(void *arg)
             break;
         }
         if (!stream->_run) {
-            stream->cfg.derived_context_cleanup(stream);
+            if (stream->cfg.derived_context_cleanup) {
+                stream->cfg.derived_context_cleanup(stream);
+            }
             continue;
         }
         if (!stream->_pause) {
-            esp_err_t err = stream->cfg.derived_context_init(stream);
-            if (err != ESP_OK) {
-                audio_stream_generate_event(stream, STREAM_EVENT_FAILED);
-                continue;
+            if (stream->cfg.derived_context_init) {
+                esp_err_t err = stream->cfg.derived_context_init(stream);
+                if (err != ESP_OK) {
+                    audio_stream_generate_event(stream, STREAM_EVENT_FAILED);
+                    continue;
+                }
             }
         }
         stream->_pause = 0;
@@ -152,7 +156,9 @@ static void audio_stream_task(void *arg)
             if (stream->_run == 0 && stream->type == STREAM_TYPE_READER) {
                 stream->op.stream_output.func(stream->op.stream_output.arg, NULL, 0, stream->cfg.w.output_wait);
             }
-            stream->cfg.derived_context_cleanup(stream);
+            if (stream->cfg.derived_context_cleanup) {
+                stream->cfg.derived_context_cleanup(stream);
+            }
             audio_stream_generate_event(stream, STREAM_EVENT_STOPPED);
 	    printf("Generated stopped event for stream %s\n", stream->label);
         }
@@ -160,7 +166,9 @@ static void audio_stream_task(void *arg)
     ESP_LOGI(ASTAG, "Destroying stream %s", stream->label);
 
     audio_stream_generate_event(stream, STREAM_EVENT_DESTROYED);
-    stream->cfg.derived_context_cleanup(stream);
+    if (stream->cfg.derived_context_cleanup) {
+        stream->cfg.derived_context_cleanup(stream);
+    }
     stream->thread = NULL;
     stream->state = STREAM_STATE_DESTROYED;
 

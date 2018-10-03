@@ -1,0 +1,8 @@
+
+menu "HTTP Client"
+config HTTP_CLIENT_MAX_HDR_VAL_LEN
+    int "Maximum size of the HTTP header name and value"
+    default 50
+    help
+        This option sets the maximum size for the HTTP header name and value fields separately
+endmenu
