@@ -101,8 +101,14 @@ typedef int (*sh2lib_putpost_data_cb_t)(struct sh2lib_handle *handle, char *data
  *
  * Only 'https' URIs are supported.
  *
- * @param[out] hd      Pointer to a variable of the type 'struct sh2lib_handle'.
+ * @param[out] hd       Pointer to a variable of the type 'struct sh2lib_handle'.
  * @param[in]  uri      Pointer to the URI that should be connected to.
+ * @param[in]  hdr_cd   Callback function invoked when a header name/value pair is received.
+ * @param[in]  data_chunk_recv_cb  Callback function invoked when a chunk of data in DATA frame is received.
+ * @param[in]  stream_close_cb  Callback function invoked when the stream (stream_id) is closed.
+ * @param[in]  goaway_handle_cb  Callback function invoked when GOAWAY frame is received
+ * @param[in]  tls_cfg  Pointer to the ESP-TLS configuration that should be used for the connection. In tls_cfg,
+ *                      the value of alpn_protos, if not specified, is set to a default value of "h2"
  *
  * @return
  *             - ESP_OK if the connection was successful
@@ -112,7 +118,8 @@ int sh2lib_connect(struct sh2lib_handle *hd, const char *uri,
                    nghttp2_on_header_callback hdr_cb,
                    nghttp2_on_data_chunk_recv_callback data_chunk_recv_cb,
                    nghttp2_on_stream_close_callback stream_close_cb,
-                   sh2lib_on_goaway_receive_callback goaway_handle_cb);
+                   sh2lib_on_goaway_receive_callback goaway_handle_cb,
+                   esp_tls_cfg_t *tls_cfg);
 
 /**
  * @brief Free a sh2lib handle

@@ -95,7 +95,7 @@ static int header_parser(httpc_conn_t *httpc, char *buf, size_t buf_len)
     return 0;
 }
 
-httpc_conn_t *http_connection_new(const char *url)
+httpc_conn_t *http_connection_new(const char *url, esp_tls_cfg_t *tls_cfg)
 {
     httpc_conn_t *h;
 
@@ -106,12 +106,10 @@ httpc_conn_t *http_connection_new(const char *url)
 
     /* Connect to host */
     struct esp_tls *tls;
-    struct esp_tls_cfg tls_cfg;
     bool is_tls = is_url_tls(url, &u);
-    memset(&tls_cfg, 0, sizeof(tls_cfg));
     tls = esp_tls_conn_new(&url[u.field_data[UF_HOST].off], u.field_data[UF_HOST].len,
                            get_port(url, &u),
-			   is_tls ? &tls_cfg : NULL);
+			   is_tls ? tls_cfg : NULL);
     if (!tls) {
         return NULL;
     }
@@ -488,7 +486,10 @@ httpc_conn_t *http_renew_session(httpc_conn_t *httpc, httpc_ops_t op, const char
     if (strncmp(httpc->host, url + u.field_data[UF_HOST].off, u.field_data[UF_HOST].len) ||
             (httpc->is_tls != is_url_tls(url, &u))) { /* We need a new connection. */
         http_connection_delete(httpc);
-        httpc = http_connection_new(url);
+        esp_tls_cfg_t tls_cfg = {
+            .use_global_ca_store = true,
+        };
+        httpc = http_connection_new(url, &tls_cfg);
         if (!httpc) {
             return NULL;
         }

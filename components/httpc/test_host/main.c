@@ -39,7 +39,9 @@ static int validate_data(int from_index, const char *expected, const char *recei
 static int test_postman_get_multi()
 {
     printf("test: open connection https://postman-echo.com/ ....");
-    httpc_conn_t *h = http_connection_new("https://postman-echo.com");
+    esp_tls_cfg_t tls_cfg;
+    memset(&tls_cfg, 0, sizeof(tls_cfg));
+    httpc_conn_t *h = http_connection_new("https://postman-echo.com", &tls_cfg);
     if (!h) {
         printf("Fail, couldn't open connection\n");
         return -1;
@@ -153,7 +155,9 @@ static int test_postman_get_multi()
 static int test_postman_get_multi_with_header_fetch()
 {
     printf("test: open connection https://postman-echo.com/ with header fetch api call ....");
-    httpc_conn_t *h = http_connection_new("https://postman-echo.com");
+    esp_tls_cfg_t tls_cfg;
+    memset(&tls_cfg, 0, sizeof(tls_cfg));
+    httpc_conn_t *h = http_connection_new("https://postman-echo.com", &tls_cfg);
     if (!h) {
         printf("Fail, couldn't open connection\n");
         return -1;
@@ -269,7 +273,9 @@ static int test_postman_get_multi_with_header_fetch()
 static int test_postman_get()
 {
     printf("test: GET https://postman-echo.com/get ....");
-    httpc_conn_t *h = http_connection_new("https://postman-echo.com");
+    esp_tls_cfg_t tls_cfg;
+    memset(&tls_cfg, 0, sizeof(tls_cfg));
+    httpc_conn_t *h = http_connection_new("https://postman-echo.com", &tls_cfg);
     if (!h) {
         printf("Fail, couldn't open connection\n");
         return -1;
@@ -296,7 +302,9 @@ static int test_postman_get()
 static int test_postman_send_custom_hdrs()
 {
     printf("test: GET https://postman-echo.com/get with custom hdrs ....");
-    httpc_conn_t *h = http_connection_new("https://postman-echo.com");
+    esp_tls_cfg_t tls_cfg;
+    memset(&tls_cfg, 0, sizeof(tls_cfg));
+    httpc_conn_t *h = http_connection_new("https://postman-echo.com", &tls_cfg);
     if (!h) {
         printf("Fail, couldn't open connection\n");
         return -1;
@@ -328,7 +336,9 @@ static int test_postman_send_custom_hdrs()
 static int test_postman_http_get()
 {
     printf("test: GET http://postman-echo.com/get ....");
-    httpc_conn_t *h = http_connection_new("http://postman-echo.com");
+    esp_tls_cfg_t tls_cfg;
+    memset(&tls_cfg, 0, sizeof(tls_cfg));
+    httpc_conn_t *h = http_connection_new("http://postman-echo.com", &tls_cfg);
     if (!h) {
         printf("Fail, couldn't open connection\n");
         return -1;
@@ -356,7 +366,9 @@ static int test_postman_get_with_full_path()
 {
 #define FULL_PATH_URI "https://postman-echo.com/get?a=b&c=d"
     printf("test: GET https://postman-echo.com/get (with full path and query parameters) ....");
-    httpc_conn_t *h = http_connection_new(FULL_PATH_URI);
+    esp_tls_cfg_t tls_cfg;
+    memset(&tls_cfg, 0, sizeof(tls_cfg));
+    httpc_conn_t *h = http_connection_new(FULL_PATH_URI, &tls_cfg);
     if (!h) {
         printf("Fail, couldn't open connection\n");
         return -1;
@@ -436,7 +448,9 @@ static void all_hdr_val_check()
 static int test_validate_header_values()
 {
     printf("test: header callback \n - all headers seen \n - long hdr/value truncated ....");
-    httpc_conn_t *h = http_connection_new("https://postman-echo.com");
+    esp_tls_cfg_t tls_cfg;
+    memset(&tls_cfg, 0, sizeof(tls_cfg));
+    httpc_conn_t *h = http_connection_new("https://postman-echo.com", &tls_cfg);
     if (!h) {
         printf("Fail, couldn't open connection\n");
         return -1;
@@ -508,7 +522,9 @@ int main(int argc, char *argv[])
     } else if (strcmp(op_str, "TEST") == 0) {
         return main_test_func();
     }
-    httpc_conn_t *h = http_connection_new(url);
+    esp_tls_cfg_t tls_cfg;
+    memset(&tls_cfg, 0, sizeof(tls_cfg));
+    httpc_conn_t *h = http_connection_new(url, &tls_cfg);
     http_request_new(h, op, path);
     http_request_send(h, data, strlen(data));
     char buf[700];

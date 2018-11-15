@@ -5,6 +5,6 @@
 
 PROJECT_NAME := alexa
 
-EXTRA_COMPONENT_DIRS += $(PROJECT_PATH)/../../components $(PROJECT_PATH)/../../components/speech_recog
+EXTRA_COMPONENT_DIRS += $(PROJECT_PATH)/../../components $(PROJECT_PATH)/../../components/speech_recog 
 
 include $(IDF_PATH)/make/project.mk

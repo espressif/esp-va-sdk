@@ -147,6 +147,18 @@ static int nvs_set_cli_handler(int argc, char *argv[])
     return 0;
 }
 
+static int nvs_erase_cli_handler(int argc, char *argv[])
+{
+    avs_nvs_flash_erase();
+    return 0;
+}
+
+static int reboot_cli_handler(int argc, char *argv[])
+{
+    esp_restart();
+    return 0;
+}
+
 static int heap_trace_records;
 static heap_trace_record_t *heap_trace_records_buf;
 static void cli_heap_trace_start()
@@ -235,6 +247,16 @@ static esp_console_cmd_t diag_cmds[] = {
         .command = "nvs-set",
         .help = "<namespace> <variable> <string|blob> <value>",
         .func = nvs_set_cli_handler,
+    },
+    {
+        .command = "nvs-erase",
+        .help = " ",
+        .func = nvs_erase_cli_handler,
+    },
+    {
+        .command = "reboot",
+        .help = " ",
+        .func = reboot_cli_handler,
     },
     {
         .command = "heap-trace",

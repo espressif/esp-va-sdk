@@ -1,5 +1,26 @@
 ## ChangeLog
 
+### v1.0b1r5 (Beta) - 2018-11-12
+
+**Enhancements**
+
+* TLS Certificate validation of Amazon and other streaming sites.
+
+**API Changes**
+
+* http_connection_new now requires pointer to esp_tls_cfg_t object.
+* Check application's README for a new patch on esp-idf, without which compilation will fail with this release.
+
+**Bug Fixes**
+
+* Device goes in infinite loop if internet goes down while responding to "What's up?"
+* Other minor exception fixes
+
+**Known Issues/Improvements**
+
+* Only limited TuneIn radio stations are supported
+* It is largely tested with internet and WiFi connectivity intact throughout its operation. Some issues are seen when device loses connectivity.
+
 ### v1.0b1r4 (Beta) - 2018-09-28
 
 **Enhancements**
@@ -12,7 +33,7 @@
 **API Changes**
 
 * Older http_stream.c/.h is now renamed to http_playback_stream.c/.h. All APIs starting with http_stream are renamed to http_playback_stream
-* http_stream.c/.h file now contains APIs which are useful to create a stream to POST data to cloud and receive response on the same connection and stream (optional)
+* http_stream.c/.h file now contains APIs which are useful to create a stream to POST data to cloud and receive response on the same connection and stream
 
 **Bug Fixes**
 
@@ -40,12 +61,11 @@
 * No intermittent audio playback between multiple Speak directives of the same dialog (e.g "What's up")
 * Few stability related fixes
 
-**Known Issues/Improvements**
+**Known Issues**
 
 * Crashes are seen in Audible when segments >512 are received
 * Only limited TuneIn radio stations are supported
 * It is largely tested with internet and WiFi connectivity intact throughout its operation. Some issues are seen when device loses connectivity.
-* TLS Certificate validation of Amazon and other streaming sites is yet to be done.
 
 ### v1.0b1r2 (Beta) - 2018-08-14
 

@@ -222,16 +222,17 @@ int sh2lib_connect(struct sh2lib_handle *hd, const char *uri,
                    nghttp2_on_header_callback hdr_cb,
                    nghttp2_on_data_chunk_recv_callback data_chunk_recv_cb,
                    nghttp2_on_stream_close_callback stream_close_cb,
-                   sh2lib_on_goaway_receive_callback goaway_handle_cb)
+                   sh2lib_on_goaway_receive_callback goaway_handle_cb,
+                   esp_tls_cfg_t *tls_cfg)
 {
     memset(hd, 0, sizeof(*hd));
-
-    const char *proto[] = {"h2", NULL};
-    esp_tls_cfg_t tls_cfg = {
-        .alpn_protos = proto,
-        .non_block = true,
-    };
-    if ((hd->http2_tls = esp_tls_conn_http_new(uri, &tls_cfg)) == NULL) {
+    if (tls_cfg->alpn_protos == NULL) {
+        ESP_LOGI(TAG, "[sh2-connect] Setting default tls_cfg parameter for alpn_proto.");
+        const char *proto[] = {"h2", NULL};
+        tls_cfg->alpn_protos = proto;
+        tls_cfg->non_block = true;
+    }
+    if ((hd->http2_tls = esp_tls_conn_http_new(uri, tls_cfg)) == NULL) {
         ESP_LOGE(TAG, "[sh2-connect] esp-tls connection failed");
         goto error;
     }
@@ -370,4 +371,3 @@ int sh2lib_do_post(struct sh2lib_handle *hd, const char *path, const char *token
                              };
     return sh2lib_do_putpost_with_nv(hd, nva, sizeof(nva) / sizeof(nva[0]), data_prd, arg);
 }
-

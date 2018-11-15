@@ -286,6 +286,8 @@ esp_err_t es8388_init(media_hal_op_mode_t es8388_mode, media_hal_adc_input_t es8
     } else {
         res |= es8388_write_reg(ES8388_ADDR, ES8388_ADCCONTROL2, 0x00);  //Default: Enable LIN1/RIN1 as ADC input
     }
+          //     es8388_write_reg(ES8388_ADDR, ES8388_ADCCONTROL8, 0xC0);
+        //res |= es8388_write_reg(ES8388_ADDR, ES8388_ADCCONTROL9,0xC0);
     return res;
 }
 

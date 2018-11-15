@@ -84,7 +84,7 @@ typedef struct httpc_conn {
     } request;
 } httpc_conn_t;
 
-httpc_conn_t *http_connection_new(const char *url);
+httpc_conn_t *http_connection_new(const char *url, esp_tls_cfg_t *tls_cfg);
 void http_connection_delete(httpc_conn_t *httpc);
 
 /* Renew existing session.

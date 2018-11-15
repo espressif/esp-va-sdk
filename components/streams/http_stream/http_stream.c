@@ -46,7 +46,9 @@ static esp_err_t parse_http_config(void *base_stream)
     int ret;
     ESP_LOGI(HLSTAG, "Passing argument as %s to connection_new", bstream->cfg.url);
 
-    bstream->handle = http_connection_new(bstream->cfg.url);
+    esp_tls_cfg_t tls_cfg;
+    memset(&tls_cfg, 0, sizeof(tls_cfg));
+    bstream->handle = http_connection_new(bstream->cfg.url, &tls_cfg);
     if (bstream->handle == NULL) {
         return ESP_FAIL;
     }

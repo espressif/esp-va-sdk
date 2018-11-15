@@ -191,7 +191,10 @@ static http_playback_stream_t *http_playback_stream_create(http_playback_stream_
 esp_err_t http_playback_stream_create_or_renew_session(http_playback_stream_t *hstream)
 {
     if (!hstream->handle) {
-        if (!(hstream->handle = http_connection_new(hstream->cfg.url))) {
+        esp_tls_cfg_t tls_cfg = {
+            .use_global_ca_store = true,
+        };
+        if (!(hstream->handle = http_connection_new(hstream->cfg.url, &tls_cfg))) {
             return ESP_FAIL;
         }
     }
@@ -217,6 +220,9 @@ esp_err_t http_playback_stream_create_or_renew_session(http_playback_stream_t *h
             continue;
         } else if (status_code != 200) {
             ESP_LOGE(TAG, "Expected 200 status code, got %d instead", status_code);
+            http_request_delete(hstream->handle);
+            http_connection_delete(hstream->handle);
+            hstream->handle = NULL;
             return ESP_FAIL;
         }
         return ESP_OK;
