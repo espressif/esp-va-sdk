@@ -36,7 +36,7 @@ typedef struct name_uuid {
      * UUID to be assigned to the BLE characteristic which is
      * mapped to the handler
      */
-    uint8_t uuid;
+    uint16_t uuid;
 } protocomm_ble_name_uuid_t;
 
 /**
@@ -61,10 +61,6 @@ typedef struct {
  *
  * Initialize and start required BLE service for provisioning. This includes
  * the initialization for characteristics/service for BLE.
- *
- * @note    If your firmware will later upgrade the Bluetooth controller mode
- *          (BLE -> BT Classic or disabled -> enabled) then remove
- *          `esp_bt_controller_mem_release` call from `simple_ble_start`
  *
  * @param[in] pc        Protocomm instance pointer obtained from protocomm_new()
  * @param[in] config    Pointer to config structure for initialising BLE

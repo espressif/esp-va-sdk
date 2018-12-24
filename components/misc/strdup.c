@@ -28,14 +28,14 @@ These funtions are a replacement for strdup and strndup
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <mem_utils.h>
+#include <va_mem_utils.h>
 #include <esp_log.h>
 
 static const char *TAG = "[strdup]";
 
-char *mem_strdup(const char *str, enum mem_region region)
+char *va_mem_strdup(const char *str, enum va_mem_region region)
 {
-    char *copy = (char *)mem_alloc(strlen(str) + 1, region);       //1 extra for the '\0' NULL character
+    char *copy = (char *)va_mem_alloc(strlen(str) + 1, region);       //1 extra for the '\0' NULL character
     if (copy) {
         strcpy(copy, str);
     } else {
@@ -44,7 +44,7 @@ char *mem_strdup(const char *str, enum mem_region region)
     return copy;
 }
 
-char *mem_strndup(const char *str, size_t len_given, enum mem_region region)
+char *va_mem_strndup(const char *str, size_t len_given, enum va_mem_region region)
 {
     size_t len;
     len_given++;                                  //1 extra for the '\0' NULL character
@@ -52,7 +52,7 @@ char *mem_strndup(const char *str, size_t len_given, enum mem_region region)
     if (len < len_given) {                        //if the provided string length is less than the given copy length
         len_given = len;
     }
-    char *copy = (char *)mem_alloc(len_given, region);
+    char *copy = (char *)va_mem_alloc(len_given, region);
     if (copy) {
         strncpy(copy, str, len_given - 1);
         copy[len_given - 1] = '\0';

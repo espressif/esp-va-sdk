@@ -30,7 +30,7 @@
 #include <limits.h>
 #include <string.h>
 
-#include <mem_utils.h>
+#include <va_mem_utils.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -226,7 +226,7 @@ void aws_iot_task(void *param) {
 
 void aws_iot_init()
 {
-    StackType_t *task_stack = (StackType_t *)mem_alloc(AWS_IOT_TASK_STACK_SIZE, EXTERNAL);
+    StackType_t *task_stack = (StackType_t *)va_mem_alloc(AWS_IOT_TASK_STACK_SIZE, VA_MEM_EXTERNAL);
     static StaticTask_t task_buf;
 
     wake_word_sem = xSemaphoreCreateBinary();

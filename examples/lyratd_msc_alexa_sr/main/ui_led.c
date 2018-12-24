@@ -20,7 +20,7 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <mem_utils.h>
+#include <va_mem_utils.h>
 #include <ui_led.h>
 #include <app_dsp.h>
 #include "audio_board.h"
@@ -293,7 +293,7 @@ esp_err_t ui_led_init()
     esp_err_t ret;
     static StaticTask_t ui_led_buf;
 
-    StackType_t *ui_led_task_stack = (StackType_t *)mem_alloc(UI_LED_TASK_STACK_SZ, EXTERNAL);
+    StackType_t *ui_led_task_stack = (StackType_t *)va_mem_alloc(UI_LED_TASK_STACK_SZ, VA_MEM_EXTERNAL);
     if (ui_led_task_stack == NULL) {
         ESP_LOGE(UI_LED_TAG, "Could not allocate mememory for ui led thread");
         return ESP_FAIL;

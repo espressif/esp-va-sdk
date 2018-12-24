@@ -155,6 +155,7 @@ int http_request_send_custom_hdr(httpc_conn_t *httpc, const char *user_hdr)
 #define GET_DATA_TEMPLATE   "GET %s HTTP/1.1\r\n"
 #define POST_DATA_TEMPLATE  "POST %s HTTP/1.1\r\n"
 #define PUT_DATA_TEMPLATE   "PUT %s HTTP/1.1\r\n"
+#define NOTIFY_DATA_TEMPLATE "NOTIFY %s HTTP/1.1\r\n"
     switch (httpc->request.op) {
     case ESP_HTTP_GET:
         req_template = GET_DATA_TEMPLATE;
@@ -164,6 +165,9 @@ int http_request_send_custom_hdr(httpc_conn_t *httpc, const char *user_hdr)
         break;
     case ESP_HTTP_PUT:
         req_template = PUT_DATA_TEMPLATE;
+        break;
+    case ESP_HTTP_NOTIFY:
+        req_template = NOTIFY_DATA_TEMPLATE;
         break;
     default:
         return -1;
@@ -210,6 +214,7 @@ static int http_request_send_our_hdr(httpc_conn_t *httpc, size_t data_len)
     }
     break;
     case ESP_HTTP_PUT:
+    case ESP_HTTP_NOTIFY:
     case ESP_HTTP_POST: {
 #define POST_DATA_TEMPLATE                      \
 "%s %s HTTP/1.1\r\n"                \
@@ -219,9 +224,11 @@ static int http_request_send_our_hdr(httpc_conn_t *httpc, size_t data_len)
 	const char *op;
 	if (httpc->request.op == ESP_HTTP_POST) {
 	    op = "POST";
-	} else {
+	} else if (httpc->request.op == ESP_HTTP_PUT) {
 	    op = "PUT";
-	}
+	} else {
+        op = "NOTIFY";
+    }
         /* 10 bytes should be sufficient to encode the content-length */
         int hdr_len = strlen(op) + strlen(POST_DATA_TEMPLATE) + strlen(httpc->request.url) +
                       strlen(httpc->host) + 10 + strlen(httpc->request.content_type) + 1;

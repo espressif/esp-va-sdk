@@ -22,4 +22,4 @@
  * This is a full fledged security implmentation using
  * Curve25519 key exchange and AES-256-CTR encryption
  */
-extern protocomm_security_t security1;
+extern const protocomm_security_t protocomm_security1;

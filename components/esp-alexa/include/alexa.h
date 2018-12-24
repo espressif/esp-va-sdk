@@ -19,13 +19,8 @@ typedef struct {
 
 typedef struct {
     const char *client_id;
+    const char *refresh_token;
     const char *client_secret;
-    const char *refresh_token;
-} mfg_config_t;
-
-typedef struct {
-    const char *client_id;
-    const char *refresh_token;
 } subsequent_auth_config_t;
 
 /** Auth Delegate Configuration Type
@@ -33,13 +28,10 @@ typedef struct {
  * Please refer to the documentation for \ref alexa_auth_type_t for more details.
  */
 typedef enum {
-    auth_type_undecided = 1,
     /** Subsequent authentication */
-    auth_type_subsequent,
+    auth_type_subsequent = 1,
     /** Authentication tokens from companion app */
     auth_type_comp_app,
-    /** Authentication from tokens in manufacturing partition */
-    auth_type_static,
 } alexa_auth_type_t;
 
 /** Auth Delegate Configuration
@@ -47,13 +39,11 @@ typedef enum {
  * There can be multiple ways in which the auth delegate can be configured. For example:
  * - comp_app: Authentication was performed by a companion app, we need to exchange these tokens for the real access tokens.
  * - subsequent: We have the real access tokens in NVS, and we should use that for authentication. This step typically happens after the comp_app authentication has been used once.
- * - mfg: Credentials are stored in the 'mfg' partition, read it from there and use them
  */
 typedef struct {
     alexa_auth_type_t type;
     union {
         comp_app_config_t comp_app;
-        mfg_config_t mfg;
         subsequent_auth_config_t subsequent;
     } u;
 } auth_delegate_config_t;

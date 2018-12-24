@@ -30,7 +30,7 @@
 #include <freertos/queue.h>
 #include <driver/uart.h>
 
-#include <mem_utils.h>
+#include <va_mem_utils.h>
 
 static TaskHandle_t cli_task;
 static int stop;
@@ -122,7 +122,7 @@ int scli_init()
         return 0;
     }
 #define SCLI_STACK_SIZE 7000
-    StackType_t *task_stack = (StackType_t *)mem_alloc(SCLI_STACK_SIZE, EXTERNAL);
+    StackType_t *task_stack = (StackType_t *)va_mem_alloc(SCLI_STACK_SIZE, VA_MEM_EXTERNAL);
     static StaticTask_t task_buf;
     cli_task = xTaskCreateStatic(scli_task, "scli_cli", SCLI_STACK_SIZE, (void *) 0, 3, task_stack, &task_buf);
     if (cli_task == NULL) {

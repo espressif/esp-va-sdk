@@ -27,17 +27,18 @@
 #include <esp_heap_trace.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
-#include <mem_utils.h>
+#include <va_mem_utils.h>
 #include <avs_nvs_utils.h>
 #include <string.h>
 #include <nvs.h>
 #include <scli.h>
+#include <playback_controller.h>
 
 static const char *TAG = "diag";
 static int task_dump_cli_handler(int argc, char *argv[])
 {
     int num_of_tasks = uxTaskGetNumberOfTasks();
-    TaskStatus_t *task_array = mem_alloc(num_of_tasks * sizeof( TaskStatus_t ), EXTERNAL);
+    TaskStatus_t *task_array = va_mem_alloc(num_of_tasks * sizeof( TaskStatus_t ), VA_MEM_EXTERNAL);
     if (!task_array) {
         ESP_LOGE(TAG, "Memory not allocated for task list.");
     }
@@ -50,11 +51,11 @@ static int task_dump_cli_handler(int argc, char *argv[])
                task_array[i].uxCurrentPriority,
                task_array[i].usStackHighWaterMark);
     }
-    mem_free(task_array);
+    va_mem_free(task_array);
     return 0;
 }
 
-static int mem_dump_cli_handler(int argc, char *argv[])
+static int va_mem_dump_cli_handler(int argc, char *argv[])
 {
     printf("Description\tInternal\tSPIRAM\n");
     printf("Current Free Memory\t%d\t%d\n",
@@ -96,14 +97,14 @@ static int nvs_get_cli_handler(int argc, char *argv[])
             printf("Variable with 0 length\n");
             return 0;
         } else {
-            char *value = mem_alloc(val_length, EXTERNAL);
+            char *value = va_mem_alloc(val_length, VA_MEM_EXTERNAL);
             if (value == NULL) {
                 printf("Memory allocation failed");
                 return 0;
             }
             avs_nvs_get_str(namespace, variable, value, &val_length);
             printf("%s\n", value);
-            mem_free(value);
+            va_mem_free(value);
         }
     } else if (strcmp(type, "blob") == 0) {
         avs_nvs_get_blob(namespace, variable, NULL, &val_length);
@@ -111,14 +112,14 @@ static int nvs_get_cli_handler(int argc, char *argv[])
             printf("Variable with 0 length\n");
             return 0;
         } else {
-            uint8_t *value = mem_alloc(val_length, EXTERNAL);
+            uint8_t *value = va_mem_alloc(val_length, VA_MEM_EXTERNAL);
             if (value == NULL) {
                 printf("Memory allocation failed");
                 return 0;
             }
             avs_nvs_get_blob(namespace, variable, value, &val_length);
             hex_dump(value, val_length);
-            mem_free(value);
+            va_mem_free(value);
         }
     } else {
         printf("Incorrect argument\n");
@@ -164,7 +165,7 @@ static heap_trace_record_t *heap_trace_records_buf;
 static void cli_heap_trace_start()
 {
     if (!heap_trace_records_buf) {
-        heap_trace_records_buf = mem_alloc(heap_trace_records * sizeof(heap_trace_record_t), INTERNAL);
+        heap_trace_records_buf = va_mem_alloc(heap_trace_records * sizeof(heap_trace_record_t), VA_MEM_INTERNAL);
         if (!heap_trace_records_buf) {
             printf("Failed to allocate records buffer\n");
             return;
@@ -182,7 +183,7 @@ static void cli_heap_trace_start()
  error2:
     heap_trace_init_standalone(NULL, 0);
  error1:
-    mem_free(heap_trace_records_buf);
+    va_mem_free(heap_trace_records_buf);
     heap_trace_records_buf = NULL;
     return;
 }
@@ -196,7 +197,7 @@ static void cli_heap_trace_stop()
     heap_trace_stop();
     heap_trace_dump();
     heap_trace_init_standalone(NULL, 0);
-    mem_free(heap_trace_records_buf);
+    va_mem_free(heap_trace_records_buf);
     heap_trace_records_buf = NULL;
 }
 
@@ -227,11 +228,68 @@ static int heap_trace_cli_handler(int argc, char *argv[])
     return 0;
 }
 
+static int button_pressed_handler(int argc, char *argv[])
+{
+    enum playback_controller_feature feature;
+    enum playback_controller_action action;
+
+    if (argc < 2) {
+        printf("Incorrect arguments\n");
+        return 0;
+    }
+
+    if (strcmp(argv[1], "play") == 0) {
+        playback_controller_notify_play();
+    } else if (strcmp(argv[1], "pause") == 0) {
+        playback_controller_notify_pause();
+    } else if (strcmp(argv[1], "next") == 0) {
+        playback_controller_notify_next();
+    } else if (strcmp(argv[1], "previous") == 0) {
+        playback_controller_notify_previous();
+    } else if (strcmp(argv[1], "forward") == 0) {
+        playback_controller_notify_skip_forward();
+    } else if (strcmp(argv[1], "backward") == 0) {
+        playback_controller_notify_skip_backward();
+    } else if (strcmp(argv[1], "feature") == 0) {
+        if (argc < 4) {
+            printf("Incorrect arguments\n");
+            return 0;
+        }
+        if (strcmp(argv[2], "shuffle") == 0) {
+            feature = PLAYBACK_CONTROLLER_SHUFFLE;
+        } else if (strcmp(argv[2], "loop") == 0) {
+            feature = PLAYBACK_CONTROLLER_LOOP;
+        } else if (strcmp(argv[2], "repeat") == 0) {
+            feature = PLAYBACK_CONTROLLER_REPEAT;
+        } else if (strcmp(argv[2], "thumbsup") == 0) {
+            feature = PLAYBACK_CONTROLLER_THUMBSUP;
+        } else if (strcmp(argv[2], "thumbsdown") == 0) {
+            feature = PLAYBACK_CONTROLLER_THUMBSDOWN;
+        } else {
+            printf("Incorrect feature\n");
+            return 0;
+        }
+        if (strcmp(argv[3], "select") == 0) {
+            action = PLAYBACK_CONTROLLER_SELECT;
+        } else if (strcmp(argv[3], "deselect") == 0) {
+            action = PLAYBACK_CONTROLLER_DESELECT;
+        } else {
+            printf("Incorrect action\n");
+            return 0;
+        }
+        playback_controller_notify_feature(feature, action);
+    } else {
+        printf("Incorrect arguments\n");
+        return 0;
+    }
+    return 0;
+}
+
 static esp_console_cmd_t diag_cmds[] = {
     {
         .command = "mem-dump",
         .help = "",
-        .func = mem_dump_cli_handler,
+        .func = va_mem_dump_cli_handler,
     },
     {
         .command = "task-dump",
@@ -262,6 +320,11 @@ static esp_console_cmd_t diag_cmds[] = {
         .command = "heap-trace",
         .help = "<start|stop> [trace-buf-size]",
         .func = heap_trace_cli_handler,
+    },
+    {
+        .command = "button",
+        .help = "<play|pause|next|previous|forward|backward|feature> <shuffle|loop|repeat|thumbsup|thumbsdown> <select|deselect>",
+        .func = button_pressed_handler,
     },
 };
 

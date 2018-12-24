@@ -22,4 +22,4 @@
  * This is a simple implementation to be used when no
  * security is required for the protocomm instance
  */
-extern protocomm_security_t security0;
+extern const protocomm_security_t protocomm_security0;

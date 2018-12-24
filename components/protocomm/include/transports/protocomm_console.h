@@ -16,13 +16,27 @@
 
 #include <protocomm.h>
 
+#define PROTOCOMM_CONSOLE_DEFAULT_CONFIG() { \
+    .stack_size     = 4096,                  \
+    .task_priority  = tskIDLE_PRIORITY + 3,  \
+}
+
+/**
+ * @brief   Config parameters for protocomm console
+ */
+typedef struct {
+    size_t   stack_size;        /*!< Stack size of console taks */
+    unsigned task_priority;     /*!< Priority of console task */
+} protocomm_console_config_t;
+
 /**
  * @brief   Start console based protocomm transport
  *
  * @note    This is a singleton. ie. Protocomm can have multiple instances, but only
  *          one instance can be bound to a console based transport layer.
  *
- * @param[in] pc    Protocomm instance pointer obtained from protocomm_new()
+ * @param[in] pc     Protocomm instance pointer obtained from protocomm_new()
+ * @param[in] config Config param structure for protocomm console
  *
  * @return
  *  - ESP_OK : Server started succefully
@@ -31,7 +45,7 @@
  *  - ESP_ERR_INVALID_STATE : Transport layer already bound to this protocomm instance
  *  - ESP_FAIL : Failed to start console thread
  */
-esp_err_t protocomm_console_start(protocomm_t *pc);
+esp_err_t protocomm_console_start(protocomm_t *pc, const protocomm_console_config_t *config);
 
 /**
  * @brief   Stop console protocomm transport

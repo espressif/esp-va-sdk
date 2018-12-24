@@ -28,6 +28,7 @@ typedef enum {
     ESP_HTTP_GET,
     ESP_HTTP_POST,
     ESP_HTTP_PUT,
+    ESP_HTTP_NOTIFY,
 } httpc_ops_t;
 
 enum httpc_req_status {

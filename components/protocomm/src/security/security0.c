@@ -20,14 +20,13 @@
 #include <esp_log.h>
 
 #include <protocomm_security.h>
+#include <protocomm_security0.h>
 
 #include "session.pb-c.h"
 #include "sec0.pb-c.h"
 #include "constants.pb-c.h"
 
 static const char* TAG = "security0";
-
-extern protocomm_security_t security0;
 
 static esp_err_t sec0_session_setup(uint32_t session_id,
                                     SessionData *req, SessionData *resp,
@@ -78,8 +77,8 @@ static esp_err_t sec0_req_handler(const protocomm_security_pop_t *pop, uint32_t 
         ESP_LOGE(TAG, "Unable to unpack setup_req");
         return ESP_ERR_INVALID_ARG;
     }
-    if (req->sec_ver != security0.ver) {
-        ESP_LOGE(TAG, "Security version mismatch. Closing connection\n");
+    if (req->sec_ver != protocomm_security0.ver) {
+        ESP_LOGE(TAG, "Security version mismatch. Closing connection");
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -97,17 +96,16 @@ static esp_err_t sec0_req_handler(const protocomm_security_pop_t *pop, uint32_t 
     *outlen = session_data__get_packed_size(&resp);
     *outbuf = (uint8_t *) malloc(*outlen);
     if (!*outbuf) {
-        ESP_LOGE(TAG, "System out of memory\n");
+        ESP_LOGE(TAG, "System out of memory");
         return ESP_ERR_NO_MEM;
     }
     session_data__pack(&resp, *outbuf);
 
     sec0_session_setup_cleanup(session_id, &resp);
     return ESP_OK;
-
 }
 
-protocomm_security_t security0 = {
+const protocomm_security_t protocomm_security0 = {
     .ver = 0,
     .security_req_handler = sec0_req_handler,
 };

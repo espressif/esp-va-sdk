@@ -16,11 +16,24 @@
 
 #include <protocomm.h>
 
+#define PROTOCOMM_HTTPD_DEFAULT_CONFIG() {   \
+    .port           = 80,                    \
+    .stack_size     = 4096,                  \
+    .task_priority  = tskIDLE_PRIORITY + 5,  \
+}
+
 /**
  * @brief   Config parameters for protocomm HTTP server
  */
 typedef struct {
-    uint16_t port;  /*!< Port on which the http server will listen */
+    uint16_t port;          /*!< Port on which the http server will listen */
+
+    /**
+     * Stack size of server task, adjusted depending
+     * upon stack usage of endpoint handler
+     */
+    size_t   stack_size;
+    unsigned task_priority; /*!< Priority of server task */
 } protocomm_httpd_config_t;
 
 /**

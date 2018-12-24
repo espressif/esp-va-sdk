@@ -24,7 +24,7 @@
 #include <str_utils.h>
 #include <string.h>
 #include <stdio.h>
-#include <mem_utils.h>
+#include <va_mem_utils.h>
 #include <esp_log.h>
 
 static const char *TAG = "[str_utils]";
@@ -33,10 +33,10 @@ void str_create_or_append(char **current_data, const char *data, int size)
 {
     int current_size = 0;
     if (*current_data == NULL) {
-        *current_data = (char *) mem_alloc(size + 1, EXTERNAL);
+        *current_data = (char *) va_mem_alloc(size + 1, VA_MEM_EXTERNAL);
     } else {
         current_size = strlen(*current_data);
-        *current_data = (char *) mem_realloc(*current_data, current_size + size + 1, EXTERNAL);
+        *current_data = (char *) va_mem_realloc(*current_data, current_size + size + 1, VA_MEM_EXTERNAL);
     }
     if (*current_data) {
         for (int i = 0; i < size; i++) {
@@ -65,7 +65,7 @@ int estr_append(estr_t *estr, const char *str, ...)
         /* Calculate multiple of realloc_block_size to be added */
         short additional_blocks = (overflow / estr->realloc_block_size) + 1;
         short new_size = estr->buf_size + (additional_blocks * estr->realloc_block_size);
-        estr->buf = mem_realloc(estr->buf, new_size, EXTERNAL);
+        estr->buf = va_mem_realloc(estr->buf, new_size, VA_MEM_EXTERNAL);
         if (!estr->buf) {
             ESP_LOGE(TAG, "Failed to realloc estr");
             return -1;
@@ -81,18 +81,18 @@ int estr_append(estr_t *estr, const char *str, ...)
 
 estr_t *estr_new(size_t size, size_t realloc_block_size)
 {
-    estr_t *estr = (estr_t *)mem_alloc(sizeof(estr_t), EXTERNAL);
+    estr_t *estr = (estr_t *)va_mem_alloc(sizeof(estr_t), VA_MEM_EXTERNAL);
     if (!estr) {
         return NULL;
     }
     estr->buf_size = size;
-    estr->buf = mem_alloc(estr->buf_size, EXTERNAL);
+    estr->buf = va_mem_alloc(estr->buf_size, VA_MEM_EXTERNAL);
     if (realloc_block_size <= 0)
         estr->realloc_block_size = DEFAULT_REALLOC_BLOCK_SIZE;
     else
         estr->realloc_block_size = realloc_block_size;
     if (!estr->buf) {
-        mem_free(estr);
+        va_mem_free(estr);
         return NULL;
     }
     return estr;
@@ -100,6 +100,6 @@ estr_t *estr_new(size_t size, size_t realloc_block_size)
 
 void estr_delete(estr_t *estr)
 {
-    mem_free(estr->buf);
-    mem_free(estr);
+    va_mem_free(estr->buf);
+    va_mem_free(estr);
 }

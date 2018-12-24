@@ -1,5 +1,27 @@
 ## ChangeLog
 
+### v1.0b1r6 (Beta) - 2018-12-24
+
+**Enhancements**
+
+* Support for local mp3 playback. Example application has also been added.
+* Support for EqualizerController interface. Just facilitating APIs are added, user should register and implement callback function for actual Equalizer control.
+* Support for CLI-based PlaybackController interface. Play, pause, next, previous, button and toggle commands are supported. "button" CLI can be used to emulate button press on the device. Or application can call appropriate API from playback_controller.h to notify SDK of button press (if user wants to implement hardware button).
+* Support for CLI based WiFi provisioning. App is still required for Amazon authentication.
+
+**API Changes**
+
+* Removed support for static authentication (AVS partition based authentication).
+
+**Bug Fixes**
+
+* Fixed bugs related to stability and device getting stuck in infinite loop in some cases.
+
+**Known Issues/Improvements**
+
+* Only limited TuneIn radio stations are supported
+* It is largely tested with internet and WiFi connectivity intact throughout its operation. Some issues are seen when device loses connectivity.
+
 ### v1.0b1r5 (Beta) - 2018-11-12
 
 **Enhancements**

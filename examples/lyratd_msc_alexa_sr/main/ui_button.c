@@ -52,7 +52,7 @@ typedef struct {
 } button_val_range_t;
 
 #include "ui_button.h"
-#include <mem_utils.h>
+#include <va_mem_utils.h>
 #include "speaker.h"
 #include "app_dsp.h"
 #include "avs_nvs_utils.h"
@@ -195,7 +195,7 @@ static esp_err_t ui_button_adc_init()
 esp_err_t ui_button_init()
 {
     ui_button_adc_init();
-    StackType_t *ui_button_task_stack = (StackType_t *)mem_alloc(UI_BUTTON_TASK_BUFFER_SZ, EXTERNAL);
+    StackType_t *ui_button_task_stack = (StackType_t *)va_mem_alloc(UI_BUTTON_TASK_BUFFER_SZ, VA_MEM_EXTERNAL);
     static StaticTask_t ui_button_task_buf;
     button_st.ui_button_task_handle = xTaskCreateStatic(ui_button_task, "ui-button-thread", UI_BUTTON_TASK_BUFFER_SZ,
                                       NULL, CONFIG_ESP32_PTHREAD_TASK_PRIO_DEFAULT, ui_button_task_stack, &ui_button_task_buf);

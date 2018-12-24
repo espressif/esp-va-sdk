@@ -18,10 +18,13 @@
 #include <protocomm_security.h>
 #include <esp_err.h>
 
+#define PROTOCOMM_NO_SESSION_ID UINT32_MAX
+
 /* Bit Flags for indicating intended functionality of handler to either
  * process request or establish secure session */
 #define REQ_EP      (1 << 0)    /*!< Flag indicating request  handling endpoint */
 #define SEC_EP      (1 << 1)    /*!< Flag indicating security handling endpoint */
+#define VER_EP      (1 << 2)    /*!< Flag indicating version  handling endpoint */
 
 /**
  * @brief   Protocomm endpoint table entry prototype
@@ -60,9 +63,9 @@ struct protocomm {
 
     /* Pointer to security layer instance to be used internally for
      * establising secure sessions */
-    protocomm_security_t *sec;
+    const protocomm_security_t *sec;
 
-    /* Pointer to proof of possesion object */
+    /* Pointer to proof of possession object */
     protocomm_security_pop_t *pop;
 
     /* Head of the singly linked list for storing endpoint handlers */
@@ -70,4 +73,7 @@ struct protocomm {
 
     /* Private data to be used internally by the protocomm instance */
     void* priv;
+
+    /* Application specific version string */
+    const char* ver;
 };

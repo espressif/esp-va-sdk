@@ -98,9 +98,13 @@ esp_err_t media_hal_control_volume(media_hal_t* media_hal, uint8_t volume)
 {
     esp_err_t ret;
     mutex_lock(media_hal->media_hal_lock);
-    ret = media_hal->audio_codec_control_volume(volume);
+    if (volume == 0) {
+        ret = es8388_set_mute(1);
+    } else {
+        ret = media_hal->audio_codec_control_volume(volume);
+        volume_prv = volume;
+    }
     mutex_unlock(media_hal->media_hal_lock);
-    volume_prv = volume;
     return ret;
 }
 

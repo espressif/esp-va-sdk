@@ -20,7 +20,7 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <mem_utils.h>
+#include <va_mem_utils.h>
 #include <ui_led.h>
 #include <app_dsp.h>
 #include <esp_log.h>

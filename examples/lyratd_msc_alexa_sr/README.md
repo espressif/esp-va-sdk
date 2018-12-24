@@ -45,7 +45,7 @@ Android and iOS apps are available to configure WiFi credentials and associate u
 * While playing from Amazon Music there are few initial glitches before the song starts playing smoothly.
 
 # Demo
-* Once the board boots up and successfully connects to the Wi-Fi network after provisioning, you can say ALEXA and speak or use "Rec" button on LyraTD-MSC board for conversation. For Tap-to-Talk, press and release the button and speak. The green LED glows when the microphone is active.
+* Once the board boots up and successfully connects to the Wi-Fi network after provisioning, you will see a print "Alexa is ready", after which you can say ALEXA and speak or use "Rec" button on LyraTD-MSC board for conversation. For Tap-to-Talk, press and release the button and speak. The green LED glows when the microphone is active.
 * You can connect any external speaker/headphone with 3.5mm connector to PHONE JACK to listen to responses.
 * you can now ask any command like:
     * tell me a joke

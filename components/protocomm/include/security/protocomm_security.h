@@ -17,16 +17,16 @@
 #include <esp_err.h>
 
 /**
- * @brief   Proof Of Possesion for authenticating a secure session
+ * @brief   Proof Of Possession for authenticating a secure session
  */
 typedef struct protocomm_security_pop {
     /**
-     * Pointer to buffer containing the proof of possesion data
+     * Pointer to buffer containing the proof of possession data
      */
     const uint8_t *data;
 
     /**
-     * Length (in bytes) of the proof of possesion data
+     * Length (in bytes) of the proof of possession data
      */
     uint16_t len;
 } protocomm_security_pop_t;

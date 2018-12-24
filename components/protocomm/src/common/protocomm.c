@@ -141,6 +141,7 @@ esp_err_t protocomm_req_handle(protocomm_t *pc, const char *ep_name, uint32_t se
                                uint8_t **outbuf, ssize_t *outlen)
 {
     if ((pc == NULL) || (ep_name == NULL)) {
+        ESP_LOGE(TAG, "Invalid params %p %p", pc, ep_name);
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -154,6 +155,7 @@ esp_err_t protocomm_req_handle(protocomm_t *pc, const char *ep_name, uint32_t se
     if (ep->flag & SEC_EP) {
         /* Call the registered endpoint handler for establishing secure session */
         ret = ep->req_handler(session_id, inbuf, inlen, outbuf, outlen, ep->priv_data);
+        ESP_LOGD(TAG, "SEC_EP Req handler returned %d", ret);
     } else if (ep->flag & REQ_EP) {
         if (pc->sec && pc->sec->decrypt) {
             /* Decrypt the data first */
@@ -206,7 +208,11 @@ esp_err_t protocomm_req_handle(protocomm_t *pc, const char *ep_name, uint32_t se
                                   inbuf, inlen,
                                   outbuf, outlen,
                                   ep->priv_data);
+            ESP_LOGD(TAG, "No encrypt ret %d", ret);
         }
+    } else if (ep->flag & VER_EP) {
+        ret = ep->req_handler(session_id, inbuf, inlen, outbuf, outlen, ep->priv_data);
+        ESP_LOGD(TAG, "VER_EP Req handler returned %d", ret);
     }
     return ret;
 }
@@ -229,35 +235,39 @@ static int protocomm_common_security_handler(uint32_t session_id,
 }
 
 esp_err_t protocomm_set_security(protocomm_t *pc, const char *ep_name,
-                                 protocomm_security_t *sec,
+                                 const protocomm_security_t *sec,
                                  const protocomm_security_pop_t *pop)
 {
-    esp_err_t ret;
-
-    if (ep_name) {
-        ret = protocomm_add_endpoint_internal(pc, ep_name,
-                                              protocomm_common_security_handler,
-                                              (void *) pc, SEC_EP);
-        if (ret != ESP_OK) {
-            ESP_LOGE(TAG, "Error adding security endpoint");
-            return ret;
-        }
+    if ((pc == NULL) || (ep_name == NULL) || (sec == NULL)) {
+        return ESP_ERR_INVALID_ARG;
     }
 
-    if (sec && sec->init) {
+    if (pc->sec) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    esp_err_t ret = protocomm_add_endpoint_internal(pc, ep_name,
+                                                    protocomm_common_security_handler,
+                                                    (void *) pc, SEC_EP);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Error adding security endpoint");
+        return ret;
+    }
+
+    if (sec->init) {
         ret = sec->init();
         if (ret != ESP_OK) {
             ESP_LOGE(TAG, "Error initialising security");
             protocomm_remove_endpoint(pc, ep_name);
             return ret;
         }
-        pc->sec = sec;
     }
+    pc->sec = sec;
 
     if (pop) {
         pc->pop = malloc(sizeof(protocomm_security_pop_t));
         if (pc->pop == NULL) {
-            ESP_LOGE(TAG, "Error allocating Proof of Possesion");
+            ESP_LOGE(TAG, "Error allocating Proof of Possession");
             if (pc->sec && pc->sec->cleanup) {
                 pc->sec->cleanup();
                 pc->sec = NULL;
@@ -285,6 +295,88 @@ esp_err_t protocomm_unset_security(protocomm_t *pc, const char *ep_name)
     if (pc->pop) {
         free(pc->pop);
         pc->pop = NULL;
+    }
+
+    return protocomm_remove_endpoint(pc, ep_name);
+}
+
+static int protocomm_version_handler(uint32_t session_id,
+                                     const uint8_t *inbuf, ssize_t inlen,
+                                     uint8_t **outbuf, ssize_t *outlen,
+                                     void *priv_data)
+{
+    const char *resp_match = "SUCCESS";
+    const char *resp_fail  = "FAIL";
+    bool match = false;
+    char *version = strndup((const char *)inbuf, inlen);
+    protocomm_t *pc = (protocomm_t *) priv_data;
+    *outbuf = NULL;
+    *outlen = 0;
+
+    if ((pc->ver != NULL) && (version != NULL)) {
+        ESP_LOGV(TAG, "Protocol version of device : %s", pc->ver);
+        ESP_LOGV(TAG, "Protocol version of client : %s", version);
+        if (strcmp(pc->ver, version) == 0) {
+            match = true;
+        }
+    } else if ((pc->ver == NULL) && (version == NULL)) {
+        match = true;
+    }
+    free(version);
+
+    if (!match) {
+        ESP_LOGE(TAG, "Protocol version mismatch");
+    }
+
+    const char *result_msg = match ? resp_match : resp_fail;
+
+    /* Output is a non null terminated string with length specified */
+    *outlen = strlen(result_msg);
+    *outbuf = malloc(strlen(result_msg));
+    if (outbuf == NULL) {
+        ESP_LOGE(TAG, "Failed to allocate memory for version check response");
+        return ESP_ERR_NO_MEM;
+    }
+
+    memcpy(*outbuf, result_msg, *outlen);
+    return ESP_OK;
+}
+
+esp_err_t protocomm_set_version(protocomm_t *pc, const char *ep_name, const char *version)
+{
+    if ((pc == NULL) || (ep_name == NULL) || (version == NULL)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (pc->ver) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    pc->ver = strdup(version);
+    if (pc->ver == NULL) {
+        ESP_LOGE(TAG, "Error allocating version string");
+        return ESP_ERR_NO_MEM;
+    }
+
+    esp_err_t ret = protocomm_add_endpoint_internal(pc, ep_name,
+                                                    protocomm_version_handler,
+                                                    (void *) pc, VER_EP);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Error adding version endpoint");
+        return ret;
+    }
+    return ESP_OK;
+}
+
+esp_err_t protocomm_unset_version(protocomm_t *pc, const char *ep_name)
+{
+    if ((pc == NULL) || (ep_name == NULL)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (pc->ver) {
+        free((char *)pc->ver);
+        pc->ver = NULL;
     }
 
     return protocomm_remove_endpoint(pc, ep_name);

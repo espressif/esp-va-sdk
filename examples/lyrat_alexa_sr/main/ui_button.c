@@ -25,7 +25,7 @@
 #include <nvs_flash.h>
 #include <esp_timer.h>
 #include <speaker.h>
-#include <mem_utils.h>
+#include <va_mem_utils.h>
 #include <es8388.h>
 #include <alexa_app_cb.h>
 #include <app_dsp.h>
@@ -117,7 +117,7 @@ esp_err_t ui_button_init()
         return ESP_FAIL;
     }
     ui_button_gpio_init();
-    StackType_t *ui_button_task_stack = (StackType_t *)mem_alloc(UI_BUTTON_TASK_BUFFER_SZ, EXTERNAL);
+    StackType_t *ui_button_task_stack = (StackType_t *)va_mem_alloc(UI_BUTTON_TASK_BUFFER_SZ, VA_MEM_EXTERNAL);
     static StaticTask_t ui_button_task_buf;
     button_st.ui_button_sem = xSemaphoreCreateBinary();
     if (button_st.ui_button_sem == NULL) {

@@ -73,7 +73,7 @@ openssl s_client -showcerts -connect hostname:8883 < /dev/null
 * When AWS is enabled, after provisioning the device takes time(15-20 sec) to connect to AWS.
 
 # Demo
-* Once the board boots up and successfully connects to the Wi-Fi network after provisioning, you can say ALEXA and speak or use "Rec" button on LyraT board for conversation. For Tap-to-Talk, press and release the button and speak. The green LED glows when the microphone is active.
+* Once the board boots up and successfully connects to the Wi-Fi network after provisioning, you will see a print "Alexa is ready", after which you can say ALEXA and speak or use "Rec" button on LyraT board for conversation. For Tap-to-Talk, press and release the button and speak. The green LED glows when the microphone is active.
 * You can connect any external speaker/headphone with 3.5mm connector to PHONE JACK to listen to responses.
 * you can now ask any command like:
     * tell me a joke

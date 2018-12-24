@@ -69,7 +69,7 @@ typedef struct {
 static const char *TAG = "protocomm_test";
 
 static protocomm_t *test_pc = NULL;
-static protocomm_security_t *test_sec = NULL;
+static const protocomm_security_t *test_sec = NULL;
 static uint32_t test_priv_data = 1234;
 
 static void flip_endian(uint8_t *data, size_t len)
@@ -114,7 +114,7 @@ static esp_err_t prepare_command0(session_t *session, SessionData *req)
     in->sc0 = in_req;
 
     req->proto_case = SESSION_DATA__PROTO_SEC1;
-    req->sec_ver = security1.ver;
+    req->sec_ver = protocomm_security1.ver;
     req->sec1 = in;
 
     return ESP_OK;
@@ -188,7 +188,7 @@ static esp_err_t verify_response0(session_t *session, SessionData *resp)
 
     const protocomm_security_pop_t *pop = session->pop;
     if (pop != NULL && pop->data != NULL && pop->len != 0) {
-        ESP_LOGD(TAG, "Adding proof of possession\n");
+        ESP_LOGD(TAG, "Adding proof of possession");
         uint8_t sha_out[PUBLIC_KEY_LEN];
 
         ret = mbedtls_sha256_ret((const unsigned char *) pop->data, pop->len, sha_out, 0);
@@ -266,7 +266,7 @@ static esp_err_t prepare_command1(session_t *session, SessionData *req)
     out->sc1 = out_req;
 
     req->proto_case = SESSION_DATA__PROTO_SEC1;
-    req->sec_ver = security1.ver;
+    req->sec_ver = protocomm_security1.ver;
     req->sec1 = out;
 
     return ESP_OK;
@@ -587,17 +587,17 @@ static esp_err_t start_test_service(uint8_t sec_ver, const protocomm_security_po
     }
 
     if (sec_ver == 0) {
-        if (protocomm_set_security(test_pc, "test-sec", &security0, NULL) != ESP_OK) {
+        if (protocomm_set_security(test_pc, "test-sec", &protocomm_security0, NULL) != ESP_OK) {
             ESP_LOGE(TAG, "Failed to set Security0");
             return ESP_FAIL;
         }
-        test_sec = &security0;
+        test_sec = &protocomm_security0;
     } else if (sec_ver == 1) {
-        if (protocomm_set_security(test_pc, "test-sec", &security1, pop) != ESP_OK) {
+        if (protocomm_set_security(test_pc, "test-sec", &protocomm_security1, pop) != ESP_OK) {
             ESP_LOGE(TAG, "Failed to set Security1");
             return ESP_FAIL;
         }
-        test_sec = &security1;
+        test_sec = &protocomm_security1;
     }
 
     if (protocomm_add_endpoint(test_pc, "test-ep",

@@ -22,7 +22,7 @@
  *
  */
 #include <json_utils.h>
-#include <mem_utils.h>
+#include <va_mem_utils.h>
 
 char *json_alloc_and_get_str(jparse_ctx_t *jp, const char *json_key)
 {
@@ -34,7 +34,7 @@ char *json_alloc_and_get_str(jparse_ctx_t *jp, const char *json_key)
 
     if (len) {
 	len += 1; /* For the null termination */
-	str = (char *)mem_alloc(len, EXTERNAL);
+	str = (char *)va_mem_alloc(len, VA_MEM_EXTERNAL);
 	if (!str) {
 	    return NULL;
 	}

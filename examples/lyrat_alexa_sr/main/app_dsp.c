@@ -30,7 +30,7 @@
 
 #include <esp_log.h>
 #include <speech_recognizer.h>
-#include <mem_utils.h>
+#include <va_mem_utils.h>
 #include "app_dsp.h"
 #include <ui_led.h>
 #include <ui_button.h>

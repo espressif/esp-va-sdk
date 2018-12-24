@@ -226,9 +226,9 @@ int sh2lib_connect(struct sh2lib_handle *hd, const char *uri,
                    esp_tls_cfg_t *tls_cfg)
 {
     memset(hd, 0, sizeof(*hd));
+    const char *proto[] = {"h2", NULL};
     if (tls_cfg->alpn_protos == NULL) {
         ESP_LOGI(TAG, "[sh2-connect] Setting default tls_cfg parameter for alpn_proto.");
-        const char *proto[] = {"h2", NULL};
         tls_cfg->alpn_protos = proto;
         tls_cfg->non_block = true;
     }

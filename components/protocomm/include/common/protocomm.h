@@ -151,21 +151,22 @@ esp_err_t protocomm_req_handle(protocomm_t *pc, const char *ep_name, uint32_t se
  *  - An endpoint must be bound to a valid protocomm instance,
  *    created using `protocomm_new()`.
  *  - The choice of security can be any `protocomm_security_t` instance.
- *    Choices `Security0` and `Security1` are readily available.
+ *    Choices `protocomm_security0` and `protocomm_security1` are readily available.
  *
  * @param[in] pc        Pointer to the protocomm instance
  * @param[in] ep_name   Endpoint identifier(name) string
  * @param[in] sec       Pointer to endpoint security instance
- * @param[in] pop       Pointer to proof of possesion for authenticating a client
+ * @param[in] pop       Pointer to proof of possession for authenticating a client
  *
  * @return
  *  - ESP_OK : Added new security endpoint succesfully
  *  - ESP_FAIL : Error adding endpoint / Endpoint with this name already exists
+ *  - ESP_ERR_INVALID_STATE : Security endpoint already set
  *  - ESP_ERR_NO_MEM : Error allocating endpoint resource
  *  - ESP_ERR_INVALID_ARG : Null instance/name/handler arguments
  */
 esp_err_t protocomm_set_security(protocomm_t *pc, const char *ep_name,
-                                 protocomm_security_t *sec,
+                                 const protocomm_security_t *sec,
                                  const protocomm_security_pop_t *pop);
 
 /**
@@ -183,3 +184,43 @@ esp_err_t protocomm_set_security(protocomm_t *pc, const char *ep_name,
  *  - ESP_ERR_INVALID_ARG : Null instance/name arguments
  */
 esp_err_t protocomm_unset_security(protocomm_t *pc, const char *ep_name);
+
+/**
+ * @brief   Set endpoint for version verification
+ *
+ * This API can be used for setting an application specific protocol
+ * version which can be verfied by clients through the endpoint.
+ *
+ * @note
+ *  - An endpoint must be bound to a valid protocomm instance,
+ *    created using `protocomm_new()`.
+
+ * @param[in] pc        Pointer to the protocomm instance
+ * @param[in] ep_name   Endpoint identifier(name) string
+ * @param[in] version   Version identifier(name) string
+ *
+ * @return
+ *  - ESP_OK : Added new security endpoint succesfully
+ *  - ESP_FAIL : Error adding endpoint / Endpoint with this name already exists
+ *  - ESP_ERR_INVALID_STATE : Version endpoint already set
+ *  - ESP_ERR_NO_MEM : Error allocating endpoint resource
+ *  - ESP_ERR_INVALID_ARG : Null instance/name/handler arguments
+ */
+esp_err_t protocomm_set_version(protocomm_t *pc, const char *ep_name,
+                                const char *version);
+
+/**
+ * @brief   Remove version verification endpoint from a protocomm instance
+ *
+ * This API will remove a registered version endpoint identified by
+ * an endpoint name.
+ *
+ * @param[in] pc        Pointer to the protocomm instance
+ * @param[in] ep_name   Endpoint identifier(name) string
+ *
+ * @return
+ *  - ESP_OK : Added new endpoint succesfully
+ *  - ESP_ERR_NOT_FOUND : Endpoint with specified name doesn't exist
+ *  - ESP_ERR_INVALID_ARG : Null instance/name arguments
+ */
+esp_err_t protocomm_unset_version(protocomm_t *pc, const char *ep_name);

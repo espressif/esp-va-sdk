@@ -25,7 +25,7 @@
 #define _STR_UTILS_H_
 
 #include <sys/types.h>
-#include <mem_utils.h>
+#include <va_mem_utils.h>
 
 #define DEFAULT_REALLOC_BLOCK_SIZE  2000
 

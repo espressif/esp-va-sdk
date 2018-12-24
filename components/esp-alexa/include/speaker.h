@@ -20,4 +20,22 @@
  */
 int speaker_notify_vol_changed(int vol);
 
+/** Change the speaker volume
+ *
+ * This API should be called by the application to change the volume of the speaker.
+ * The volume is changed instantly. Also an event for volume changed is sent to Alexa.
+ *
+ * \param[in] vol Volume represented in percentage. Allowed range is 0-100.
+ *
+ */
+int speaker_set_vol(int vol);
+
+/** Get the speaker volume
+ * 
+ * This API returns the currrent speaker volume. The value is in
+ * percentage and its range is 0-100.
+ *
+ */
+int speaker_get_vol();
+
 #endif /* _SPEAKER_H_ */

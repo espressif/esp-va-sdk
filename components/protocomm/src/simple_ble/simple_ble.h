@@ -81,8 +81,6 @@ esp_err_t simple_ble_deinit();
  * using BLE.
  * This API sets the MTU size to 500 (this is not part of the config structure)
  *
- * Note that this API also releases the memory for the BT classic mode.
- *
  * @return ESP_OK on success, and appropriate error code for failure
  */
 esp_err_t simple_ble_start(simple_ble_cfg_t *cfg);
@@ -104,6 +102,6 @@ esp_err_t simple_ble_stop();
  *
  * @return uuid the UUID of the handle, -1 in case of invalid handle
  */
-uint8_t simple_ble_get_uuid(uint16_t handle);
+uint16_t simple_ble_get_uuid(uint16_t handle);
 
 #endif /* _SIMPLE_BLE_ */

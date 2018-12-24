@@ -26,13 +26,11 @@
 
 #include "protocomm_priv.h"
 
-static TaskHandle_t console_task;
 static const char *TAG = "protocomm_console";
-static protocomm_t *pc_console; /* The global protocomm instance for console */
-static uint32_t session_id = 0xffffffff;
 
-static uint8_t console_started;
-static uint8_t stop = 0;
+static uint32_t session_id = PROTOCOMM_NO_SESSION_ID;
+static protocomm_t *pc_console   = NULL; /* The global protocomm instance for console */
+static TaskHandle_t console_task = NULL;
 
 esp_err_t protocomm_console_stop(protocomm_t *pc)
 {
@@ -40,26 +38,19 @@ esp_err_t protocomm_console_stop(protocomm_t *pc)
         ESP_LOGE(TAG, "Incorrect stop request");
         return ESP_ERR_INVALID_ARG;
     }
-    if (pc->sec && pc->sec->cleanup) {
-        pc->sec->cleanup();
-    }
 
-    stop = 1;
-    console_started = 0;
-    pc_console = NULL;
-
-    esp_console_deinit();
-
+    ESP_LOGI(TAG, "Stopping console...");
+    xTaskNotifyGive(console_task);
     return ESP_OK;
 }
 
-static ssize_t hex2bin(const char* hexstr, uint8_t *bytes)
+static ssize_t hex2bin(const char *hexstr, uint8_t *bytes)
 {
     size_t hexstrLen = strlen(hexstr);
     ssize_t bytesLen = hexstrLen / 2;
 
     int count = 0;
-    const char* pos = hexstr;
+    const char *pos = hexstr;
 
     for(count = 0; count < bytesLen; count++) {
         sscanf(pos, "%2hhx", &bytes[count]);
@@ -67,6 +58,13 @@ static ssize_t hex2bin(const char* hexstr, uint8_t *bytes)
     }
 
     return bytesLen;
+}
+
+static bool stopped(void)
+{
+    uint32_t flag = 0;
+    xTaskNotifyWait(0, 0, &flag, (TickType_t) 10/portTICK_RATE_MS);
+    return (flag != 0);
 }
 
 static void protocomm_console_task(void *arg)
@@ -78,7 +76,7 @@ static void protocomm_console_task(void *arg)
     QueueHandle_t uart_queue;
     uart_event_t event;
 
-    ESP_LOGI(TAG, "Initialising UART on port %d", uart_num);
+    ESP_LOGV(TAG, "Initialising UART on port %d", uart_num);
     uart_driver_install(uart_num, 256, 0, 8, &uart_queue, 0);
     /* Initialize the console */
     esp_console_config_t console_config = {
@@ -89,15 +87,14 @@ static void protocomm_console_task(void *arg)
     esp_console_init(&console_config);
     esp_console_register_help_command();
 
-    while (!stop) {
+    while (!stopped()) {
         uart_write_bytes(uart_num, "\n>> ", 4);
         memset(linebuf, 0, sizeof(linebuf));
         i = 0;
         do {
-            //ret = xQueueReceive(uart_queue, (void * )&event, (portTickType)portMAX_DELAY);
-            ret = xQueueReceive(uart_queue, (void * )&event, (portTickType) 10);
+            ret = xQueueReceive(uart_queue, (void * )&event, (TickType_t) 10/portTICK_RATE_MS);
             if (ret != pdPASS) {
-                if(stop == 1) {
+                if (stopped()) {
                     break;
                 } else {
                     continue;
@@ -114,21 +111,33 @@ static void protocomm_console_task(void *arg)
                 }
             }
         } while ((i < 255) && linebuf[i-1] != '\r');
-        if (stop) {
+        if (stopped()) {
             break;
         }
         ret = esp_console_run((char *) linebuf, &cmd_ret);
         if (ret < 0) {
-            printf("Console dispatcher error\n");
+            ESP_LOGE(TAG, "Console dispatcher error\n");
             break;
         }
     }
-    ESP_LOGE(TAG, "Stopped console");
+
+    if (pc_console->sec && pc_console->sec->cleanup) {
+        pc_console->sec->cleanup();
+    }
+
+    pc_console = NULL;
+    esp_console_deinit();
+
+    ESP_LOGI(TAG, "Console stopped");
     vTaskDelete(NULL);
 }
 
 static int common_cmd_handler(int argc, char** argv)
 {
+    if (argc < 3) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
     int i, ret;
 
     uint32_t cur_session_id = atoi(argv[1]);
@@ -191,13 +200,13 @@ static esp_err_t protocomm_console_remove_endpoint(const char *ep_name)
     return ESP_OK;
 }
 
-esp_err_t protocomm_console_start(protocomm_t *pc)
+esp_err_t protocomm_console_start(protocomm_t *pc, const protocomm_console_config_t *config)
 {
     if (pc == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    if (console_started) {
+    if (pc_console != NULL) {
         if (pc_console == pc) {
             return ESP_ERR_INVALID_STATE;
         }
@@ -206,15 +215,14 @@ esp_err_t protocomm_console_start(protocomm_t *pc)
         }
     }
 
+
+    if (xTaskCreate(protocomm_console_task, "protocomm_console",
+                    config->stack_size, NULL, config->task_priority, &console_task) != pdPASS) {
+        return ESP_FAIL;
+    }
+
     pc->add_endpoint = protocomm_console_add_endpoint;
     pc->remove_endpoint = protocomm_console_remove_endpoint;
     pc_console = pc;
-
-    if (xTaskCreate(protocomm_console_task, "protocomm_console",
-                    4096, (void *) 0, 3, &console_task) != pdPASS) {
-        return ESP_FAIL;
-    }
-    console_started = 1;
-    stop = 0;
     return ESP_OK;
 }

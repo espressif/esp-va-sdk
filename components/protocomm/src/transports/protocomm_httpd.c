@@ -26,50 +26,46 @@
 
 static const char *TAG = "protocomm_httpd";
 static protocomm_t *pc_httpd; /* The global protocomm instance for HTTPD */
-static uint32_t session_id = 0xffffffff;
+static uint32_t session_id = PROTOCOMM_NO_SESSION_ID;
 
 #define MAX_REQ_BODY_LEN 4096
 
-static char *get_ep_name_from_req(httpd_req_t *req)
+static esp_err_t common_post_handler(httpd_req_t *req)
 {
-    char *str, *to_free;
-    str = to_free = strdup((char *) req->uri);
-
-    while (strsep(&str, "/") != NULL);
-
-    str = to_free;
-
-    while(strlen(str) == 0) {
-        str++;
-    }
-
-    char *ep = strdup(str);
-    if (!ep) {
-        ESP_LOGE(TAG, "Unable to alloc mem for ep name");
-        return NULL;
-    }
-
-    return ep;
-}
-
-static int common_post_handler(httpd_req_t *req)
-{
-    int ret;
+    esp_err_t ret;
     uint8_t *outbuf = NULL;
     char *req_body = NULL;
-    char *ep_name = NULL;
+    const char *ep_name = NULL;
     ssize_t outlen;
 
     int cur_session_id = httpd_req_to_sockfd(req);
-    ESP_LOGI(TAG, "Session ID: %d", cur_session_id);
 
     if (cur_session_id != session_id) {
+        /* Initialise new security session */
+        if (session_id != PROTOCOMM_NO_SESSION_ID) {
+            ESP_LOGV(TAG, "Closing session with ID: %d", session_id);
+            /* Presently HTTP server doesn't support callback on socket closure so
+             * previous session can only be closed when new session is requested */
+            if (pc_httpd->sec && pc_httpd->sec->close_transport_session) {
+                ret = pc_httpd->sec->close_transport_session(session_id);
+                if (ret != ESP_OK) {
+                    ESP_LOGE(TAG, "Failed to close session with ID: %d", session_id);
+                    ret = ESP_FAIL;
+                    goto out;
+                }
+            }
+            session_id = PROTOCOMM_NO_SESSION_ID;
+        }
         if (pc_httpd->sec && pc_httpd->sec->new_transport_session) {
             ret = pc_httpd->sec->new_transport_session(cur_session_id);
-            if (ret == ESP_OK) {
-                session_id = cur_session_id;
+            if (ret != ESP_OK) {
+                ESP_LOGE(TAG, "Failed to launch new session with ID: %d", cur_session_id);
+                ret = ESP_FAIL;
+                goto out;
             }
         }
+        session_id = cur_session_id;
+        ESP_LOGV(TAG, "New session with ID: %d", cur_session_id);
     }
 
     if (req->content_len <= 0) {
@@ -82,55 +78,49 @@ static int common_post_handler(httpd_req_t *req)
         goto out;
     }
 
-    req_body = (char *) malloc(sizeof(char) * req->content_len);
+    req_body = (char *) malloc(req->content_len);
     if (!req_body) {
         ESP_LOGE(TAG, "Unable to allocate for request length %d", req->content_len);
         ret = ESP_ERR_NO_MEM;
         goto out;
     }
 
-    ret = httpd_req_recv(req, req_body, req->content_len);
-    if (ret < 0) {
-        ESP_LOGE(TAG, "1");
-        ret = ESP_FAIL;
-        goto out;
+    size_t recv_size = 0;
+    while (recv_size < req->content_len) {
+        ret = httpd_req_recv(req, req_body + recv_size, req->content_len - recv_size);
+        if (ret < 0) {
+            ret = ESP_FAIL;
+            goto out;
+        }
+        recv_size += ret;
     }
 
-    ep_name = get_ep_name_from_req(req);
-    if (!ep_name) {
-        ESP_LOGE(TAG, "2");
-        ret = ESP_FAIL;
-        goto out;
-    }
+    /* Extract the endpoint name from URI string of type "/ep_name" */
+    ep_name = req->uri + 1;
 
     ret = protocomm_req_handle(pc_httpd, ep_name, session_id,
-                               (uint8_t *)req_body, ret, &outbuf, &outlen);
+                               (uint8_t *)req_body, recv_size, &outbuf, &outlen);
 
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "data handler failed");
+        ESP_LOGE(TAG, "Data handler failed");
         ret = ESP_FAIL;
         goto out;
     }
 
     ret = httpd_resp_send(req, (char *)outbuf, outlen);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "http send failed");
+        ESP_LOGE(TAG, "HTTP send failed");
         ret = ESP_FAIL;
         goto out;
     }
     ret = ESP_OK;
 out:
-    if (ep_name) {
-        free(ep_name);
-    }
     if (req_body) {
         free(req_body);
     }
     if (outbuf) {
         free(outbuf);
     }
-
-    ESP_LOGI(TAG, "ADI Done");
     return ret;
 }
 
@@ -142,7 +132,7 @@ esp_err_t protocomm_httpd_add_endpoint(const char *ep_name,
         return ESP_ERR_INVALID_STATE;
     }
 
-    ESP_LOGI(TAG, "Adding endpoint : %s", ep_name);
+    ESP_LOGV(TAG, "Adding endpoint : %s", ep_name);
 
     /* Construct URI name by prepending '/' to ep_name */
     char* ep_uri = calloc(1, strlen(ep_name) + 2);
@@ -179,7 +169,7 @@ static esp_err_t protocomm_httpd_remove_endpoint(const char *ep_name)
         return ESP_ERR_INVALID_STATE;
     }
 
-    ESP_LOGI(TAG, "Removing endpoint : %s", ep_name);
+    ESP_LOGV(TAG, "Removing endpoint : %s", ep_name);
 
     /* Construct URI name by prepending '/' to ep_name */
     char* ep_uri = calloc(1, strlen(ep_name) + 2);
@@ -227,6 +217,8 @@ esp_err_t protocomm_httpd_start(protocomm_t *pc, const protocomm_httpd_config_t 
     /* Configure the HTTP server */
     httpd_config_t server_config   = HTTPD_DEFAULT_CONFIG();
     server_config.server_port      = config->port;
+    server_config.stack_size       = config->stack_size;
+    server_config.task_priority    = config->task_priority;
     server_config.lru_purge_enable = true;
     server_config.max_open_sockets = 1;
 

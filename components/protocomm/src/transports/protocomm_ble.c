@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <sys/param.h>
 #include <esp_log.h>
 #include <esp_gatt_common_api.h>
 
@@ -33,7 +34,7 @@ const uint16_t character_declaration_uuid   = ESP_GATT_UUID_CHAR_DECLARE;
 const uint8_t char_prop_read_write          = ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_WRITE;
 
 typedef struct {
-    uint8_t                 *prepare_buf;
+    uint8_t                *prepare_buf;
     int                     prepare_len;
     uint16_t                handle;
 } prepare_type_env_t;
@@ -79,13 +80,13 @@ static esp_ble_adv_data_t adv_data = {
 
 static void hexdump(const char *msg, uint8_t *buf, int len)
 {
-    ESP_LOGI(TAG, "%s:", msg);
-    ESP_LOG_BUFFER_HEX(TAG, buf, len);
+    ESP_LOGD(TAG, "%s:", msg);
+    ESP_LOG_BUFFER_HEX_LEVEL(TAG, buf, len, ESP_LOG_DEBUG);
 }
 
 static const char *handle_to_handler(uint16_t handle)
 {
-    uint8_t uuid = simple_ble_get_uuid(handle);
+    uint16_t uuid = simple_ble_get_uuid(handle);
     for (int i = 0; i < protoble_internal->g_nu_lookup_count; i++) {
         if (protoble_internal->g_nu_lookup[i].uuid == uuid ) {
             return protoble_internal->g_nu_lookup[i].name;
@@ -103,16 +104,15 @@ static void transport_simple_ble_read(esp_gatts_cb_event_t event, esp_gatt_if_t 
     ESP_LOGD(TAG, "Inside read w/ session - %d on param %d %d",
              param->read.conn_id, param->read.handle, read_len);
     if (!read_len) {
-        ESP_LOGI(TAG, "Reading attr value first time");
+        ESP_LOGD(TAG, "Reading attr value first time");
         status = esp_ble_gatts_get_attr_value(param->read.handle, &read_len,  &read_buf);
     } else {
-        ESP_LOGI(TAG, "Subsequent read request for attr value");
+        ESP_LOGD(TAG, "Subsequent read request for attr value");
     }
 
     esp_gatt_rsp_t *gatt_rsp = (esp_gatt_rsp_t *) malloc(sizeof(esp_gatt_rsp_t));
     if (gatt_rsp != NULL) {
-        gatt_rsp->attr_value.len = read_len > (protoble_internal->gatt_mtu - 1) ?
-                                   protoble_internal->gatt_mtu - 1 : read_len;
+        gatt_rsp->attr_value.len = MIN(read_len, (protoble_internal->gatt_mtu - 1));
         if (read_len && read_buf) {
             memcpy(gatt_rsp->attr_value.value,
                    read_buf + param->read.offset,
@@ -276,9 +276,9 @@ static void transport_simple_ble_exec_write(esp_gatts_cb_event_t event, esp_gatt
 static void transport_simple_ble_disconnect(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param)
 {
     esp_err_t ret;
-    ESP_LOGD(TAG, "Inside disconnect w/ session - %d", param->disconnect.conn_id);
+    ESP_LOGV(TAG, "Inside disconnect w/ session - %d", param->disconnect.conn_id);
     if (protoble_internal->pc_ble->sec &&
-        protoble_internal->pc_ble->sec->new_transport_session) {
+        protoble_internal->pc_ble->sec->close_transport_session) {
         ret = protoble_internal->pc_ble->sec->close_transport_session(param->disconnect.conn_id);
         if (ret != ESP_OK) {
             ESP_LOGE(TAG, "error closing the session after disconnect");
@@ -290,7 +290,7 @@ static void transport_simple_ble_disconnect(esp_gatts_cb_event_t event, esp_gatt
 static void transport_simple_ble_connect(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param)
 {
     esp_err_t ret;
-    ESP_LOGI(TAG, "Inside BLE connect w/ conn_id - %d", param->connect.conn_id);
+    ESP_LOGV(TAG, "Inside BLE connect w/ conn_id - %d", param->connect.conn_id);
     if (protoble_internal->pc_ble->sec &&
         protoble_internal->pc_ble->sec->new_transport_session) {
         ret = protoble_internal->pc_ble->sec->new_transport_session(param->connect.conn_id);
@@ -481,14 +481,14 @@ esp_err_t protocomm_ble_start(protocomm_t *pc, const protocomm_ble_config_t *con
 
     esp_err_t err = simple_ble_start(ble_config);
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "simple_ble_start failed w/ error code %d", err);
+        ESP_LOGE(TAG, "simple_ble_start failed w/ error code 0x%x", err);
         simple_ble_deinit();
         protocomm_ble_cleanup();
         return err;
     }
 
     prepare_write_env.prepare_buf = NULL;
-    ESP_LOGI(TAG, "Waiting for phone to connect ......");
+    ESP_LOGV(TAG, "Waiting for client to connect ......");
     return ESP_OK;
 }
 
