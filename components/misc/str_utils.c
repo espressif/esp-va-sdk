@@ -29,13 +29,11 @@
 
 static const char *TAG = "[str_utils]";
 
-void str_create_or_append(char **current_data, const char *data, int size)
+void blob_create_or_append(char **current_data, size_t current_size, const char *data, int size)
 {
-    int current_size = 0;
     if (*current_data == NULL) {
         *current_data = (char *) va_mem_alloc(size + 1, VA_MEM_EXTERNAL);
     } else {
-        current_size = strlen(*current_data);
         *current_data = (char *) va_mem_realloc(*current_data, current_size + size + 1, VA_MEM_EXTERNAL);
     }
     if (*current_data) {
@@ -102,4 +100,9 @@ void estr_delete(estr_t *estr)
 {
     va_mem_free(estr->buf);
     va_mem_free(estr);
+}
+
+char *estr_get_buf_ptr(estr_t *estr)
+{
+    return estr->buf;
 }

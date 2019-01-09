@@ -38,7 +38,8 @@ typedef struct {
     short inpcm[INPCM_DELAY_SIZE * 2];  ///the pcm value of last time calling.  maximum should be 6: 48000/8000;
     int innum;  /// the total input pcm number
     int outnum; /// the total outnum pcm number
-    float hp_mem[4]; ///for filter, the first two is for first channel, the last two is for second channel
+    float hp_mem[4]; /// for filter, the first two is for first channel, the last two is for second channel
+    int resample_ratio; /// (out_freq * 512)/in_freq. if prev resample ratio is not same as current, reset whole structure.
 } audio_resample_config_t;
 
 /**

@@ -41,8 +41,21 @@ typedef enum {
     CODEC_TYPE_MP3 = 1,
     CODEC_TYPE_AAC,
     CODEC_TYPE_MP4,
-    CODEC_TYPE_OPUS
+    CODEC_TYPE_OPUS,
+    CODEC_TYPE_FLAC,
+    CODEC_TYPE_AMR
 } audio_codec_identifier_t;
+
+/* Audio type */
+typedef enum {
+    AUDIO_TYPE_UNKNOWN,
+    AUDIO_TYPE_WAV,
+    AUDIO_TYPE_AMRNB,
+    AUDIO_TYPE_AMRWB,
+    AUDIO_TYPE_M4A,
+    AUDIO_TYPE_AAC,
+    AUDIO_TYPE_TSAAC
+} audio_type_t;
 
 typedef enum {
     CODEC_STATE_INIT = 1,
@@ -51,6 +64,12 @@ typedef enum {
     CODEC_STATE_PAUSED,
     CODEC_STATE_DESTROYED,
 } audio_codec_state_t;
+
+enum {
+    CODEC_FAIL = 0,
+    CODEC_DONE = 1,
+    CODEC_OK
+};
 
 typedef struct audio_codec_audio_info {
     int sampling_freq;

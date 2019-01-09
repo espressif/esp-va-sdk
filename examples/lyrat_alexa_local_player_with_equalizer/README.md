@@ -27,7 +27,7 @@ $ git apply ../esp-avs-sdk/esp-idf-patches/esp-tls-Add-support-for-global-CA-sto
 
 ## Build and flash the project
 ```
-$ cd esp-avs-sdk/examples/lyrat_alexa
+$ cd esp-avs-sdk/examples/test/lyrat_alexa_local_player_with_equalizer
 
 $ export IDF_PATH=/path/to/esp-idf
 
@@ -42,8 +42,12 @@ Android and iOS apps are available to configure WiFi credentials and associate u
 * [iOS](https://github.com/espressif/esp-idf-provisioning-ios/tree/versions/avs)
 
 # Demo
-* Once the board boots up and successfully connects to the Wi-Fi network after provisioning, you will see a print "Alexa is ready", after which you can use "Rec" button on LyraT board for conversation. For Tap-to-Talk, press and release the button and speak. The green LED glows when the microphone is active.
-* You can connect any external speaker/headphone with 3.5mm connector to PHONE JACK to listen to responses.
+* Once the board boots up and successfully connects to the Wi-Fi network after provisioning, device will initialize Alexa and will start playing local audio from SD card. Below is the sequence of local playback:
+  * Play 1.mp3 for 10 seconds
+  * Play 2.mp3 (This will interrupt 1.mp3 and start playing 2.mp3)
+  * Enqueue 3.mp3 and 1.mp3 (This will be played after 2.mp3 completes playback)
+* You can connect any external speaker/headphone with 3.5mm connector to PHONE JACK to listen to playback/Alexa responses.
+* Local playback can be interrupted to talk to Alexa. You can press and release Tap-to-talk button and speak. The green LED glows when the microphone is active.
 * you can now ask any command like:
     * tell me a joke
     * how is the weather?
@@ -51,4 +55,5 @@ Android and iOS apps are available to configure WiFi credentials and associate u
     * Sing a song
     * Play TuneIn radio
     * Set volume level to 7
+* After the response is completely played, device will resume local playback.
 * Press and Hold "Mode" button for 3 seconds to reset the board to factory settings

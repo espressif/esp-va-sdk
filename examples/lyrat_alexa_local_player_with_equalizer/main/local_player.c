@@ -1,3 +1,6 @@
+// Copyright 2018 Espressif Systems (Shanghai) PTE LTD
+// All rights reserved.
+
 #include <string.h>
 
 #include <freertos/FreeRTOS.h>
@@ -93,18 +96,19 @@ void local_player_task()
     char *url = NULL;
     while(1) {
         vTaskDelay(10000 / portTICK_PERIOD_MS);
-        url = va_mem_strdup("file:/sdcard/Ted.mp3", VA_MEM_EXTERNAL);
+        url = va_mem_strdup("file:///sdcard/1.mp3", VA_MEM_EXTERNAL);
         local_player_play(url, REPLACE_ALL);    
         vTaskDelay(10000 / portTICK_PERIOD_MS);
-        url = va_mem_strdup("file:/sdcard/Saavn.mp3", VA_MEM_EXTERNAL);
+        url = va_mem_strdup("file:///sdcard/2.mp3", VA_MEM_EXTERNAL);
         local_player_play(url, REPLACE_ALL);
         vTaskDelay(10000 / portTICK_PERIOD_MS);
-        url = va_mem_strdup("file:/sdcard/Saavn.mp3", VA_MEM_EXTERNAL);
+        url = va_mem_strdup("file:///sdcard/3.mp3", VA_MEM_EXTERNAL);
         local_player_play(url, ENQUEUE);
         vTaskDelay(10000 / portTICK_PERIOD_MS);
-        url = va_mem_strdup("file:/sdcard/Ted.mp3", VA_MEM_EXTERNAL);
+        url = va_mem_strdup("file:///sdcard/1.mp3", VA_MEM_EXTERNAL);
         local_player_play(url, ENQUEUE);
-        vTaskDelay(1000000 / portTICK_PERIOD_MS);
+        while (1)
+            vTaskDelay(portMAX_DELAY);
     }
 }
 

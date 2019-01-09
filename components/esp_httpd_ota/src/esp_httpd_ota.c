@@ -1,6 +1,5 @@
 #include <esp_tls.h>
 #include <esp_log.h>
-#include <http_server.h>
 #include <esp_partition.h>
 #include <esp_ota_ops.h>
 #include <errno.h>

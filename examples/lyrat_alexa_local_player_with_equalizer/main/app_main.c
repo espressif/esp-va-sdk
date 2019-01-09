@@ -21,10 +21,12 @@
 #include <conn_mgr_prov.h>
 #include <conn_mgr_prov_mode_softap.h>
 
+#include <voice_assistant.h>
+#include <alexa.h>
+
 #include <va_mem_utils.h>
 #include <scli.h>
-#include <diag_cli.h>
-#include <alexa.h>
+#include <va_diag_cli.h>
 #include <avs_config.h>
 
 #include "app_dsp.h"
@@ -34,12 +36,10 @@
 
 #define SOFTAP_SSID_PREFIX  "ESP-Alexa-"
 
-static const char *TAG = "alexa";
+static const char *TAG = "app_main";
 
 static EventGroupHandle_t cm_event_group;
 const int CONNECTED_BIT = BIT0;
-
-static alexa_config_t *alexa_cfg;
 
 static esp_err_t event_handler(void *ctx, system_event_t *event)
 {
@@ -75,14 +75,15 @@ extern int i2s_playback_init();
 
 int app_main()
 {
-    ESP_LOGI(TAG, "==== Alexa SDK version: %s ====", alexa_get_sdk_version());
+    ESP_LOGI(TAG, "==== Voice Assistant SDK version: %s ====", va_get_sdk_version());
 
-    alexa_cfg = va_mem_alloc(sizeof(alexa_config_t), VA_MEM_EXTERNAL);
-    if (!alexa_cfg) {
-        ESP_LOGE(TAG, "Failed to alloc alexa config");
+    alexa_config_t *va_cfg = va_mem_alloc(sizeof(alexa_config_t), VA_MEM_EXTERNAL);
+
+    if (!va_cfg) {
+        ESP_LOGE(TAG, "Failed to alloc voice assistant config");
         abort();
     }
-    alexa_cfg->auth_delegate.type = auth_type_subsequent;
+    va_cfg->auth_delegate.type = auth_type_subsequent;
 
     // Initialize NVS
     esp_err_t ret = nvs_flash_init();
@@ -93,7 +94,7 @@ int app_main()
     ESP_ERROR_CHECK( ret );
 
     scli_init();
-    diag_register_cli();
+    va_diag_register_cli();
     cm_event_group = xEventGroupCreate();
 
     tcpip_adapter_init();
@@ -113,7 +114,7 @@ int app_main()
 
         conn_mgr_prov_t prov_type = conn_mgr_prov_mode_softap;
         prov_type.event_cb = alexa_conn_mgr_prov_cb;
-        prov_type.cb_user_data = (void *)alexa_cfg;
+        prov_type.cb_user_data = (void *)va_cfg;
         int security = 1;
         const char *pop = "abcd1234";
         const char *service_key = "";
@@ -128,13 +129,16 @@ int app_main()
 
     i2s_playback_init();
     app_dsp_init();
-    if (alexa_init(alexa_cfg) != ESP_OK) {
+
+    ret = alexa_init(va_cfg);
+
+    if (ret != ESP_OK) {
         while(1) vTaskDelay(2);
     }
-    va_mem_free(alexa_cfg);
     
     local_player_init();
     equalizer_init();
 
+    va_mem_free(va_cfg);
     return ESP_OK;
 }

@@ -1,5 +1,30 @@
 ## ChangeLog
 
+### v1.0b1r7 (Beta) - 2018-01-08
+
+**Enhancements**
+
+* Support for Google Voice Assistant (GVA) and Google Dialogflow (Alpha release). Please check README of each voice assistant to get started.
+* Support to play custom tones from application.
+* nvs-set CLI supports setting and getting int8_t variable type.
+
+**API Changes**
+
+* Example directories are renamed.
+* Many structures, functions and header files with "alexa" prefix are renamed with "va" prefix. Please follow README-FIRST.md if you want to compile and run older examples with new SDK.
+
+**Bug Fixes**
+
+* Background noise in audio with lower sampling rates.
+* In case of incorrect provisioning parameters, device needed to be reset via command line (via esptool.py on host or nvs-erase on device). Now reset-to-factory push button (Mode) could also be used.
+* Capabilities are announced automatically when an updated firmware with new capabilities is flashed onto the device.
+* More SNTP servers are added for faster time synchronization on device boot-up.
+
+**Known Issues/Improvements**
+
+* Only limited TuneIn radio stations are supported
+* It is largely tested with internet and WiFi connectivity intact throughout its operation. Some issues are seen when device loses connectivity.
+
 ### v1.0b1r6 (Beta) - 2018-12-24
 
 **Enhancements**

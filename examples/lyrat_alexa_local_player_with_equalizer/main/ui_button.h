@@ -1,7 +1,6 @@
 // Copyright 2018 Espressif Systems (Shanghai) PTE LTD
 // All rights reserved.
 
-
 #ifndef _UI_BUTTON_H_
 #define _UI_BUTTON_H_
 #include <stdio.h>

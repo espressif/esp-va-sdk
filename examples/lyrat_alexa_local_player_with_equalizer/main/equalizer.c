@@ -1,3 +1,6 @@
+// Copyright 2018 Espressif Systems (Shanghai) PTE LTD
+// All rights reserved.
+
 #include <string.h>
 
 #include <freertos/FreeRTOS.h>

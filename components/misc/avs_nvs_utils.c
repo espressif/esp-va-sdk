@@ -50,6 +50,7 @@ struct nvs_ops_params {
         ERASE,
     } op;
     enum {
+        I8,
         STR,
         BLOB,
         INVALID,
@@ -83,6 +84,8 @@ static void nvs_task(void *arg)
             err = nvs_set_blob(handle, params->key, params->val_buf, *(params->buf_size));
         } else if (params->type == STR) {
             err = nvs_set_str(handle, params->key, (char *)params->val_buf);
+        } else if (params->type == I8) {
+            err = nvs_set_i8(handle, params->key, *(params->val_buf));
         }
         if (err != ESP_OK) {
             ESP_LOGE(TAG, "Error setting value: %s", params->key);
@@ -93,6 +96,8 @@ static void nvs_task(void *arg)
             err = nvs_get_blob(handle, params->key, params->val_buf, params->buf_size);
         } else if (params->type == STR) {
             err = nvs_get_str(handle, params->key, (char *)params->val_buf, params->buf_size);
+        } else if (params->type == I8) {
+            err = nvs_get_i8(handle, params->key, (int8_t *)params->val_buf);
         }
         if (err != ESP_OK) {
             ESP_LOGI(TAG, "No value set for: %s", params->key);
@@ -158,6 +163,38 @@ esp_err_t avs_nvs_set_str(const char *ns, const char *key, char *val_buf)
 esp_err_t avs_nvs_get_str(const char *ns, const char *key, char *val_buf, size_t *buf_size)
 {
     struct nvs_ops_params tp = {ns, key, (uint8_t *)val_buf, buf_size, GET, STR, xTaskGetCurrentTaskHandle()};
+    /* This will create a thread, do NVS operation and complete the thread */
+    TaskHandle_t nvs_task_handle;
+    xTaskCreate(nvs_task, "nvs_task", NVS_TASK_STACK_SIZE, &tp, CONFIG_ESP32_PTHREAD_TASK_PRIO_DEFAULT, &nvs_task_handle);
+    uint32_t result;
+    /* Wait for operation to complete */
+    xTaskNotifyWait(0, 0, &result, portMAX_DELAY);
+    if ((int)result != ESP_OK) {
+        return ESP_FAIL;
+    } else {
+        return ESP_OK;
+    }
+}
+
+esp_err_t avs_nvs_set_i8(const char *ns, const char *key, uint8_t val_buf)
+{
+    struct nvs_ops_params tp = {ns, key, &val_buf, NULL, SET, I8, xTaskGetCurrentTaskHandle()};
+    /* This will create a thread, do NVS operation and complete the thread */
+    TaskHandle_t nvs_task_handle;
+    xTaskCreate(nvs_task, "nvs_task", NVS_TASK_STACK_SIZE, &tp, CONFIG_ESP32_PTHREAD_TASK_PRIO_DEFAULT, &nvs_task_handle);
+    uint32_t result;
+    /* Wait for operation to complete */
+    xTaskNotifyWait(0, 0, &result, portMAX_DELAY);
+    if ((int)result != ESP_OK) {
+        return ESP_FAIL;
+    } else {
+        return ESP_OK;
+    }
+}
+
+esp_err_t avs_nvs_get_i8(const char *ns, const char *key, uint8_t *val_buf)
+{
+    struct nvs_ops_params tp = {ns, key, (uint8_t *)val_buf, NULL, GET, I8, xTaskGetCurrentTaskHandle()};
     /* This will create a thread, do NVS operation and complete the thread */
     TaskHandle_t nvs_task_handle;
     xTaskCreate(nvs_task, "nvs_task", NVS_TASK_STACK_SIZE, &tp, CONFIG_ESP32_PTHREAD_TASK_PRIO_DEFAULT, &nvs_task_handle);

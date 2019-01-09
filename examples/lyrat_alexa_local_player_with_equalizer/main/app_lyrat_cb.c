@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <esp_log.h>
 #include <resampling.h>
-#include <alexa_app_cb.h>
+#include <voice_assistant_app_cb.h>
 #include <audio_board.h>
 #include <es8388.h>
 #include <ui_led.h>
@@ -26,30 +26,30 @@ static inline int heap_caps_get_free_size_sram()
     return heap_caps_get_free_size(MALLOC_CAP_8BIT) - heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
 }
 
-void alexa_app_dialog_states(alexa_dialog_states_t alexa_states)
+void va_app_dialog_states(va_dialog_states_t va_state)
 {
-    ui_led_set(alexa_states);
-    ESP_LOGI(TAG, "Current mode is: %d", alexa_states);
+    ui_led_set(va_state);
+    ESP_LOGI(TAG, "Current mode is: %d", va_state);
 }
 
-int alexa_app_set_volume(int vol)
+int va_app_set_volume(int vol)
 {
     es8388_control_volume(vol);
     ESP_LOGI(TAG, "Volume changed to %d", vol);
     return 0;
 }
 
-int alexa_app_set_mute(alexa_mute_state_t alexa_mute_state)
+int va_app_set_mute(va_mute_state_t va_mute_state)
 {
     uint8_t current_vol;
-    if (alexa_mute_state == ALEXA_MUTE_ENABLE) {
+    if (va_mute_state == VA_MUTE_ENABLE) {
         es8388_set_mute(1);
     } else {
         es8388_set_mute(0);
         es8388_get_volume(&current_vol);
         es8388_control_volume(current_vol);
     }
-    ESP_LOGI(TAG, "Mute: %d", alexa_mute_state);
+    ESP_LOGI(TAG, "Mute: %d", va_mute_state);
     return 0;
 }
 
@@ -58,7 +58,7 @@ int alexa_app_raise_alert(alexa_alert_types_t alexa_alert_type, alexa_alert_stat
     switch (alexa_alert_type) {
         case ALEXA_ALERT_NOTIFICATION:
             //ui_led_set_alert(alexa_alert_type, alexa_alert_state);
-            //ui_led_set(ALEXA_IDLE);
+            //ui_led_set(VA_IDLE);
             break;
 
         default:
@@ -67,7 +67,7 @@ int alexa_app_raise_alert(alexa_alert_types_t alexa_alert_type, alexa_alert_stat
     return 0;
 }
 
-int alexa_app_playback_data(alexa_resample_param_t *alexa_resample_param, void *buf, ssize_t len)
+int va_app_playback_data(va_resample_param_t *va_resample_param, void *buf, ssize_t len)
 {
     //printf("[resample-cb] %d spiram %d\n", heap_caps_get_free_size_sram(), heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
     memset(convert_buf, 0, BUF_SZ);
@@ -78,7 +78,7 @@ int alexa_app_playback_data(alexa_resample_param_t *alexa_resample_param, void *
     size_t sent_len = 0;
     int conv_len = 0;
 
-    if (alexa_resample_param->alexa_resample_ch == 1) {
+    if (va_resample_param->va_resample_ch == 1) {
         /* If mono recording, we need to up-sample, so need half the buffer empty, also uint16_t data*/
         convert_block_len = CONVERT_BUF_SIZE / 4;
     } else {
@@ -91,9 +91,9 @@ int alexa_app_playback_data(alexa_resample_param_t *alexa_resample_param, void *
         if (current_convert_block_len & 1) {
             printf("Odd bytes in up sampling data, this should be backed up\n");
         }
-        conv_len = audio_resample((short *)((char *)buf + send_offset), (short *)convert_buf, alexa_resample_param->alexa_resample_freq, SAMPLING_RATE,
-                            current_convert_block_len / 2, BUF_SZ, alexa_resample_param->alexa_resample_ch, &resample);
-        if (alexa_resample_param->alexa_resample_ch == 1) {
+        conv_len = audio_resample((short *)((char *)buf + send_offset), (short *)convert_buf, va_resample_param->va_resample_freq, SAMPLING_RATE,
+                            current_convert_block_len / 2, BUF_SZ, va_resample_param->va_resample_ch, &resample);
+        if (va_resample_param->va_resample_ch == 1) {
             conv_len = audio_resample_up_channel((short *)convert_buf, (short *)convert_buf, SAMPLING_RATE, SAMPLING_RATE, conv_len, BUF_SZ, &resample);
         }
         len -= current_convert_block_len;

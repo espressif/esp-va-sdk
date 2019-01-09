@@ -29,4 +29,6 @@ esp_err_t avs_nvs_get_blob(const char *ns, const char *key, uint8_t *val_buf, si
 esp_err_t avs_nvs_set_blob(const char *ns, const char *key, uint8_t *val_buf, size_t buf_size);
 esp_err_t avs_nvs_get_str(const char *ns, const char *key, char *val_buf, size_t *buf_size);
 esp_err_t avs_nvs_set_str(const char *ns, const char *key, char *val_buf);
+esp_err_t avs_nvs_get_i8(const char *ns, const char *key, uint8_t *val_buf);
+esp_err_t avs_nvs_set_i8(const char *ns, const char *key, uint8_t val_buf);
 esp_err_t avs_nvs_flash_erase();

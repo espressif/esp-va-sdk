@@ -1,3 +1,6 @@
+// Copyright 2018 Espressif Systems (Shanghai) PTE LTD
+// All rights reserved.
+
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/queue.h>
@@ -77,7 +80,7 @@ static ssize_t dsp_write_cb(void *h, void *data, int len, uint32_t wait)
     return sent_len;
 }
 
-int alexa_app_speech_stop()
+int va_app_speech_stop()
 {
     ESP_LOGI(TAG, "Sending stop command");
     if (audio_stream_stop(&dd.read_i2s_stream->base) != 0) {
@@ -88,7 +91,7 @@ int alexa_app_speech_stop()
     return ESP_OK;
 }
 
-int alexa_app_speech_start()
+int va_app_speech_start()
 {
     ESP_LOGI(TAG, "Sending start command");
     if (audio_stream_start(&dd.read_i2s_stream->base) != 0) {
