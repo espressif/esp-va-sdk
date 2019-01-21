@@ -48,12 +48,12 @@ google-oauthlib-tool --scope https://www.googleapis.com/auth/cloud-platform \
 ```
 
 # Demo
-* Once the board successfully connects to the Wi-Fi network, you can either use "Rec" button on the board or say "Alexa" to start a conversation. (The current example only supports the _Alexa_ wakeword. Support for other wakeword will be available soon.) For Tap-to-Talk, press and release the button and speak.
+* Once the board successfully connects to the Wi-Fi network, you can press and release "Rec" button(tap-to-talk) on the board to start a conversation.
 * For an example Laundry project, one can set below configurable parameters while creating the project as described above:
     * State: On/Start or Off/Stop
     * Temperature: Valid temperature values
     * Wash Cycle: Heavy, Medium or Light
-* Now you can wake the device using either its wakeword ("Alexa") or pressing "Rec" button and say command like:
+* Now you can wake the device by pressing "Rec" button and say command like:
     * Start the laundry with temperature 68 and heavy wash cycle
 * You can also initiate multi-turn conversations like:
     * Turn on the laundry
@@ -62,4 +62,4 @@ google-oauthlib-tool --scope https://www.googleapis.com/auth/cloud-platform \
 * The Assistant's language can be changed by setting an appropriate code string va_cfg->device_config.device_language in app_main.c. List of valid code strings can be found [here](https://dialogflow.com/docs/reference/language).
 
 NOTE:
-> Once a multi-turn conversation is in-progress you do not need to press "Rec" button or say wakeword for every turn.
+> Once a multi-turn conversation is in-progress you do not need to press "Rec" button for every turn.

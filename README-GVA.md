@@ -25,7 +25,7 @@ Google Voice Assistant(GVA) is Google's version of a personal voice assistant. G
 ```
 
 # Demo
-* Once the board successfully connects to the Wi-Fi network, you can use either use "Rec" button on the board or say "Alexa" to start a conversation. (The current example only supports the _Alexa_ wakeword. Support for other wakeword will be available soon.) For Tap-to-Talk, press and release the button and speak.
+* Once the board successfully connects to the Wi-Fi network, you can press and release "Rec" button(tap-to-talk) on the board to start a conversation.
 * You can connect any external speaker/headphone with 3.5mm connector to PHONE JACK to listen to responses.
 * you can now ask any command like:
     * tell me a joke

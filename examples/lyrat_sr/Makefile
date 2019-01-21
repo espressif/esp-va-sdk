@@ -4,11 +4,9 @@
 #
 
 ifeq ("$(VOICE_ASSISTANT)","gva")
-PROJECT_NAME := gva
-CPPFLAGS += -DGVA
+$(error GVA is not supported with lyrat_sr app. Please use lyrat app.)
 else ifeq ("$(VOICE_ASSISTANT)","dialogflow")
-PROJECT_NAME := dialogflow
-CPPFLAGS += -DDIALOGFLOW
+$(error DialogFlow is not supported with lyrat_sr app. Please use lyrat app.)
 else
 PROJECT_NAME := alexa
 CPPFLAGS += -DALEXA

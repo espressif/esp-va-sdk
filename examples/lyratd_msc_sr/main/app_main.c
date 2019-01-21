@@ -22,13 +22,7 @@
 #include <conn_mgr_prov_mode_softap.h>
 
 #include <voice_assistant.h>
-#ifdef ALEXA
 #include <alexa.h>
-#elif GVA
-#include <gva.h>
-#elif DIALOGFLOW
-#include <dialogflow.h>
-#endif
 
 #include <va_mem_utils.h>
 #include <scli.h>
@@ -83,13 +77,7 @@ int app_main()
 {
     ESP_LOGI(TAG, "==== Voice Assistant SDK version: %s ====", va_get_sdk_version());
 
-#ifdef ALEXA
     alexa_config_t *va_cfg = va_mem_alloc(sizeof(alexa_config_t), VA_MEM_EXTERNAL);
-#elif GVA
-    gva_config_t *va_cfg = va_mem_alloc(sizeof(gva_config_t), VA_MEM_EXTERNAL);
-#elif DIALOGFLOW
-    dialogflow_config_t *va_cfg = va_mem_alloc(sizeof(dialogflow_config_t), VA_MEM_EXTERNAL);
-#endif
 
     if (!va_cfg) {
         ESP_LOGE(TAG, "Failed to alloc voice assistant config");
@@ -145,16 +133,7 @@ int app_main()
     i2s_playback_init();
     app_dsp_init();
 
-#ifdef ALEXA
     ret = alexa_init(va_cfg);
-#elif GVA
-    va_cfg->device_config.device_model = "device-model-default";    // Enter your model id (name) here
-    va_cfg->device_config.device_id = "device-id-default";          // Enter your (unique) device id here
-    ret = gva_init(va_cfg);
-#elif DIALOGFLOW
-    va_cfg->device_config.project_name = "project-name-default";    // Enter your dialogflow project name here.
-    ret = dialogflow_init(va_cfg);
-#endif
 
     if (ret != ESP_OK) {
         while(1) vTaskDelay(2);
