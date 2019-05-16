@@ -29,7 +29,7 @@
 #include <esp_audio_mem.h>
 #include <http_hls.h>
 
-#define TAG   "HTTP_PLAYBACK_STREAM"
+static const char *TAG = "[http_playback_stream]";
 
 static esp_err_t parse_http_config(void *base_stream)
 {
@@ -49,7 +49,7 @@ static esp_err_t parse_http_config(void *base_stream)
 
     content_type = http_response_get_content_type(hstream->handle);
 
-    if (http_hls_identify_and_init_playlist(&hstream->hls_cfg, content_type, hstream->handle) == ESP_OK) {
+    if (http_hls_identify_and_init_playlist(&hstream->hls_cfg, content_type, hstream->handle, hstream->cfg.url) == ESP_OK) {
         is_hls = true;
     } else {
         /* if it's not HLS, it could be a direct audio url */
@@ -117,14 +117,14 @@ static ssize_t http_read(void *s, void *buf, ssize_t len)
     http_playback_stream_t *bstream = (http_playback_stream_t *) s;
     int data_read = http_response_recv(bstream->handle, buf, len);
     if (data_read == -EAGAIN) {
-        printf("http-stream: returning EAGAIN\n");
+        printf("%s: [http_response_recv]: returning EAGAIN\n", TAG);
         return 0;
     }
     if (data_read == 0) {
         if (bstream->hls_cfg.media_playlist) {
             data_read = http_playlist_read_data(bstream, buf, len);
             if (data_read == -EAGAIN) {
-                printf("http-stream: returning EAGAIN\n");
+                printf("%s: [http_playlist_read_data]: returning EAGAIN\n", TAG);
                 return 0;
             }
         } else {
@@ -197,6 +197,21 @@ esp_err_t http_playback_stream_create_or_renew_session(http_playback_stream_t *h
         if (!(hstream->handle = http_connection_new(hstream->cfg.url, &tls_cfg))) {
             return ESP_FAIL;
         }
+    }
+
+    int sockfd = http_connection_get_sockfd(hstream->handle);
+    int keepalive_enable = 1;
+    int keepalive_idle_time = 30; // In seconds
+    int keepalive_probe_count = 10; // In seconds
+    int keepalive_probe_interval = 10; // In seconds
+
+    if ((setsockopt(sockfd, SOL_SOCKET, SO_KEEPALIVE, &keepalive_enable, sizeof(int)) == 0) &&
+            (setsockopt(sockfd, IPPROTO_TCP, TCP_KEEPIDLE, &keepalive_idle_time, sizeof(int)) == 0) &&
+            (setsockopt(sockfd, IPPROTO_TCP, TCP_KEEPCNT, &keepalive_probe_count, sizeof(int)) == 0) &&
+            (setsockopt(sockfd, IPPROTO_TCP, TCP_KEEPINTVL, &keepalive_probe_interval, sizeof(int)) == 0)) {
+        ESP_LOGI(TAG, "TCP Keep-alive enabled for idle timeout: %d, interval: %d, count: %d", keepalive_idle_time, keepalive_probe_interval, keepalive_probe_count);
+    } else {
+        ESP_LOGI(TAG, "Failed to enable TCP keepalive");
     }
 
     do {

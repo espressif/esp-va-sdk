@@ -18,14 +18,38 @@
 #include <tcpip_adapter.h>
 
 #include <wifi_provisioning/wifi_config.h>
+#include <wifi_provisioning/wifi_scan.h>
 
 #include "conn_mgr_prov_priv.h"
 
-static const char* TAG = "conn_mgr_prov_handler";
+static const char* TAG = "[conn_mgr_prov_handler]";
 
-static esp_err_t get_status_handler(wifi_prov_config_get_data_t *resp_data)
+/* Provide definition of wifi_prov_ctx_t */
+struct wifi_prov_ctx {
+    wifi_config_t wifi_cfg;
+};
+
+static wifi_config_t *get_config(wifi_prov_ctx_t **ctx)
 {
-    /* Initialise to zero */
+    return (*ctx ? &(*ctx)->wifi_cfg : NULL);
+}
+
+static wifi_config_t *new_config(wifi_prov_ctx_t **ctx)
+{
+    free(*ctx);
+    (*ctx) = (wifi_prov_ctx_t *) calloc(1, sizeof(wifi_prov_ctx_t));
+    return get_config(ctx);
+}
+
+static void free_config(wifi_prov_ctx_t **ctx)
+{
+    free(*ctx);
+    *ctx = NULL;
+}
+
+static esp_err_t get_status_handler(wifi_prov_config_get_data_t *resp_data, wifi_prov_ctx_t **ctx)
+{
+    /* Initialize to zero */
     memset(resp_data, 0, sizeof(wifi_prov_config_get_data_t));
 
     if (wifi_prov_get_wifi_state(&resp_data->wifi_state) != ESP_OK) {
@@ -61,23 +85,20 @@ static esp_err_t get_status_handler(wifi_prov_config_get_data_t *resp_data)
     return ESP_OK;
 }
 
-static wifi_config_t *wifi_cfg;
-
-static esp_err_t set_config_handler(const wifi_prov_config_set_data_t *req_data)
+static esp_err_t set_config_handler(const wifi_prov_config_set_data_t *req_data, wifi_prov_ctx_t **ctx)
 {
+    wifi_config_t *wifi_cfg = get_config(ctx);
     if (wifi_cfg) {
-        free(wifi_cfg);
-        wifi_cfg = NULL;
+        free_config(ctx);
     }
 
-    wifi_cfg = (wifi_config_t *) calloc(1, sizeof(wifi_config_t));
+    wifi_cfg = new_config(ctx);
     if (!wifi_cfg) {
         ESP_LOGE(TAG, "Unable to alloc wifi config");
         return ESP_FAIL;
     }
 
-    ESP_LOGI(TAG, "WiFi Credentials Received : \n\tssid %s \n\tpassword %s",
-             req_data->ssid, req_data->password);
+    printf("%s: WiFi Credentials Received: \n\tssid: %s \n\tpassword: %s\n", TAG, req_data->ssid, req_data->password);
     memcpy((char *) wifi_cfg->sta.ssid, req_data->ssid,
            strnlen(req_data->ssid, sizeof(wifi_cfg->sta.ssid)));
     memcpy((char *) wifi_cfg->sta.password, req_data->password,
@@ -85,8 +106,9 @@ static esp_err_t set_config_handler(const wifi_prov_config_set_data_t *req_data)
     return ESP_OK;
 }
 
-static esp_err_t apply_config_handler(void)
+static esp_err_t apply_config_handler(wifi_prov_ctx_t **ctx)
 {
+    wifi_config_t *wifi_cfg = get_config(ctx);
     if (!wifi_cfg) {
         ESP_LOGE(TAG, "WiFi config not set");
         return ESP_FAIL;
@@ -95,8 +117,7 @@ static esp_err_t apply_config_handler(void)
     wifi_prov_configure_sta(wifi_cfg);
     ESP_LOGI(TAG, "WiFi Credentials Applied");
 
-    free(wifi_cfg);
-    wifi_cfg = NULL;
+    free_config(ctx);
     return ESP_OK;
 }
 
@@ -104,4 +125,44 @@ wifi_prov_config_handlers_t wifi_prov_handlers = {
     .get_status_handler   = get_status_handler,
     .set_config_handler   = set_config_handler,
     .apply_config_handler = apply_config_handler,
+    .ctx = NULL
+};
+
+/*************************************************************************/
+
+static esp_err_t scan_start(bool blocking, bool passive,
+                            uint8_t group_channels, uint32_t period_ms,
+                            wifi_prov_scan_ctx_t **ctx)
+{
+    return wifi_prov_wifi_scan_start(blocking, passive, group_channels, period_ms);
+}
+
+static esp_err_t scan_status(bool *scan_finished,
+                      uint16_t *result_count,
+                      wifi_prov_scan_ctx_t **ctx)
+{
+    *scan_finished = wifi_prov_wifi_scan_finished();
+    *result_count  = wifi_prov_wifi_scan_result_count();
+    return ESP_OK;
+}
+
+static esp_err_t scan_result(uint16_t result_index,
+                      wifi_prov_scan_result_t *result,
+                      wifi_prov_scan_ctx_t **ctx)
+{
+    const wifi_ap_record_t *record = wifi_prov_wifi_scan_result(result_index);
+    if (!record) {
+        return ESP_FAIL;
+    }
+    memcpy(result->ssid, record->ssid, sizeof(record->ssid));
+    result->channel = record->primary;
+    result->rssi = record->rssi;
+    return ESP_OK;
+}
+
+wifi_prov_scan_handlers_t wifi_scan_handlers = {
+    .scan_start = scan_start,
+    .scan_status = scan_status,
+    .scan_result = scan_result,
+    .ctx = NULL
 };

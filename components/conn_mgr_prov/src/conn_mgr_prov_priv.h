@@ -16,6 +16,50 @@
 #include <wifi_provisioning/wifi_config.h>
 
 /**
+ * @brief   Start WiFi AP Scan
+ *
+ * @param[in] block           Set true to return only after scanning is complete
+ * @param[in] passive         Set true to perform passive scan instead of default active scan
+ * @param[in] group_channels  Number of channels to scan in one go
+ *                            (set to 0 for scanning all channels in one go)
+ * @param[in] period_ms       Scan time
+ *
+ * @return
+ *  - ESP_OK    : Successfully retrieved wifi state
+ *  - ESP_FAIL  : Provisioning app not running
+ */
+esp_err_t wifi_prov_wifi_scan_start(bool blocking, bool passive,
+                                    uint8_t group_channels,
+                                    uint32_t period_ms);
+
+/**
+ * @brief   Use to query the state of wifi scan
+ *
+ * @return
+ *  - true   : Scan finished
+ *  - false  : Scan running
+ */
+bool wifi_prov_wifi_scan_finished(void);
+
+/**
+ * @brief   Get the count of results in the scan list
+ *
+ * @return
+ *  - count  : Number of APs detected while scanning
+ */
+uint16_t wifi_prov_wifi_scan_result_count(void);
+
+/**
+ * @brief   Get AP record for a particular index in the scan list result
+ *
+ * @param[out] index  Index of the result to fetch
+ *
+ * @return
+ *  - result : Pointer to AP record
+ */
+const wifi_ap_record_t *wifi_prov_wifi_scan_result(uint16_t index);
+
+/**
  * @brief   Get state of WiFi Station during provisioning
  *
  * @note    WiFi is initially configured as AP, when

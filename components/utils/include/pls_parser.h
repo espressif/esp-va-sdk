@@ -28,6 +28,6 @@
 #include <httpc.h>
 #include <http_playlist.h>
 
-http_playlist_t *pls_parse(httpc_conn_t *h);
+http_playlist_t *pls_parse(httpc_conn_t *h, const char *url);
 
 #endif  /* _PLS_PARSER_H_ */

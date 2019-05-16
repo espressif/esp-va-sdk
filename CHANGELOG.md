@@ -1,6 +1,50 @@
 ## ChangeLog
 
-### v1.0b1r7 (Beta) - 2018-01-08
+### 1.0-RC1 - 2019-05-14
+
+**Enhancements**
+
+This release is a major update to the previous release and includes the following changes:
+* Alexa:
+ * All the Alexa functional and music certification tests can now be passed with this release.
+ * Robustness enhancements that pass 100-hour long duration stress tests.
+ * Wi-Fi and Alexa configuration on BLE (Bluetooth Low Energy) makes the provisioning experience much smoother (This mandates that you upgrade to the latest phone apps while using this release.).
+   * Newer app and firmware supports WiFi scanlist as well.
+ * Supports greater number of music stations because of:
+   * Greater tolerance for variance in different music stations M3U8 formats.
+   * Support for additional 'Content-Type' as reported by some music stations.
+* Improved directory structure to add flexibility to provide way to test other ESP32 based audio boards. Examples can be build and flashed on any of the following development boards with proper "AUDIO_BOARD_PATH" provided:
+ 1. LyraT
+ 2. LyraTD-SYNA
+ 3. LyraTD-DSPG
+ 4. LyraTD-MSC
+
+* LEDs and tones are added for GVA and Dialogflow.
+* Support for setting custom tones.
+* nvs-set CLI supports setting and getting int16_t variable type.
+
+**API Changes**
+
+* Examples directories are renamed according to voice assistants. There are now 3 examples viz., amazon_alexa, google_voice_assistant and google_dialogflow.
+* BLE provisioning and authentication for Alexa instead of SoftAP provisioning.
+* Local Player, Equalizer and AWS-IoT are moved inside amazon_alexa/additional_components/
+* voice_assistant_app_cb.h:
+  * va_app_set_volume() is now deprected. A new function va_app_volume_is_set() is now introduced. Earlier the app had to change the volume itself. Now this is directly handled in the medial-hal layer. The application layer only gets a notification once the volume changed has happened.
+  * va_app_set_mute() is now deprected. A new function va_app_mute_is_set() is now introduced. Earlier the app had to mute the volume itself. Now this is directly handled in the medial-hal layer. The application layer only gets a notification once the mute change has happened.
+* A new API va_boot_is_finish() is introduced that allows applications to wait until the complete boot-up has finished.
+* A new API tone_set_custom() lets application override the existing tone with a custom tone that can be played.
+* The audio_player_stop() API is now updated to include one additional parameter which is a notify callback.
+* The alexa_config_t structure now includes two additional members 'device_serial_num' and 'product_id' which are now used for communication with the AVS service.
+
+
+**Bug Fixes**
+
+* Fixed What’s up interruption stalling the device.
+* Code restructuring in the SDK to fix various race conditions occurring during long-duration testing
+* Improved stability for if the Internet or Wi-Fi connectivity is intermittent.
+* All well known TuneIn radio stations are now supported.
+
+### v1.0b1r7 (Beta) - 2019-01-08
 
 **Enhancements**
 
@@ -11,7 +55,7 @@
 **API Changes**
 
 * Example directories are renamed.
-* Many structures, functions and header files with "alexa" prefix are renamed with "va" prefix. Please follow README-FIRST.md if you want to compile and run older examples with new SDK.
+* Many structures, functions and header files with "alexa" prefix are renamed with "va" prefix. Please follow the `Upgrading from Previous Release` section from `README-Getting-Started.md` if you want to compile and run older examples with new SDK.
 
 **Bug Fixes**
 

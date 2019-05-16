@@ -50,8 +50,8 @@ static esp_err_t start_wifi_ap(const char *ssid, const char *pass)
         wifi_config.ap.authmode = WIFI_AUTH_WPA_WPA2_PSK;
     }
 
-    /* Start WiFi in AP mode with configuration built above */
-    err = esp_wifi_set_mode(WIFI_MODE_AP);
+    /* Start WiFi in AP (+ STA for scanning) mode with configuration built above */
+    err = esp_wifi_set_mode(WIFI_MODE_APSTA);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to set WiFi mode : %d", err);
         return err;

@@ -1,0 +1,10 @@
+menu "Voice Assistant Configurations"
+
+config VOICE_ASSISTANT_TASK_LIST
+    bool "Enable task list print at delete stream"
+    default n
+    depends on FREERTOS_USE_STATS_FORMATTING_FUNCTIONS
+    help
+        Prints all the tasks which are running as well as blocked.
+
+endmenu

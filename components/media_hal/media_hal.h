@@ -142,6 +142,9 @@ typedef  struct {
     esp_err_t ( *audio_codec_config_format)(media_hal_codec_mode_t mode, media_hal_format_t fmt);
     esp_err_t ( *audio_codec_control_volume)(uint8_t volume);
     esp_err_t ( *audio_codec_get_volume)(uint8_t *volume);
+    esp_err_t ( *audio_codec_set_mute)(bool mute);
+    esp_err_t ( *audio_codec_powerup)();
+    esp_err_t ( *audio_codec_powerdown)();
     xSemaphoreHandle media_hal_lock;
 } media_hal_t;
 
@@ -150,9 +153,18 @@ typedef  struct {
  *
  * @praram media_hal_conf Configure structure media_hal_config_t
  *
- * @return  int, 0--success, others--fail
+ * @return  media_hal_t* - success, otherwise NULL
  */
 media_hal_t* media_hal_init(media_hal_config_t *media_hal_conf);
+
+/**
+ * @brief Returns first initialized media_hal_t structure
+ *
+ * @praram none 
+ *
+ * @return  media_hal_t* - success, otherwise NULL
+ */
+media_hal_t* media_hal_get_handle();
 
 /**
  * @brief Uninitialize media codec driver
@@ -198,6 +210,18 @@ esp_err_t media_hal_control_volume(media_hal_t* media_hal, uint8_t volume);
 esp_err_t media_hal_get_volume(media_hal_t* media_hal, uint8_t *volume);
 
 /**
+ * @brief Set mute.
+ *        @note if volume is 0, mute is enabled
+ *
+ * @param media_hal reference function pointer for selected audio codec
+ * @param mute bool true - mute
+ *                  false - unmute
+ *
+ * @return     int, 0--success, others--fail
+ */
+esp_err_t media_hal_set_mute(media_hal_t* media_hal, bool mute);
+
+/**
  * @brief Set medial hal format
  *
  * @param media_hal reference function pointer for selected audio codec
@@ -221,6 +245,28 @@ esp_err_t media_hal_config_format(media_hal_t* media_hal, media_hal_codec_mode_t
  *     - -1  Error
  */
 esp_err_t media_hal_set_clk(media_hal_t* media_hal, media_hal_codec_mode_t mode, uint32_t rate, media_hal_bit_length_t bits_per_sample);
+
+/**
+ * @brief power up audio codec
+ *
+ * @param media_hal reference function pointer for selected audio codec
+ *
+ * @return
+ *     - 0   Success
+ *     - -1  Error
+ */
+esp_err_t media_hal_powerup(media_hal_t* media_hal);
+
+/**
+ * @brief power down audio codec
+ *
+ * @param media_hal reference function pointer for selected audio codec
+ *
+ * @return
+ *     - 0   Success
+ *     - -1  Error
+ */
+esp_err_t media_hal_powerdown(media_hal_t* media_hal);
 
 #ifdef __cplusplus
 }

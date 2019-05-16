@@ -45,7 +45,7 @@ typedef struct {
     http_hls_mime_type_t mime_type;
 } http_stream_hls_config_t;
 
-int http_hls_identify_and_init_playlist(http_stream_hls_config_t *hls_cfg, const char *mime_type, httpc_conn_t *base_conn_handle);
+int http_hls_identify_and_init_playlist(http_stream_hls_config_t *hls_cfg, const char *mime_type, httpc_conn_t *base_conn_handle, char *url);
 const char *http_hls_connect_new_variant(void *hstream);
 
 #ifdef __cplusplus

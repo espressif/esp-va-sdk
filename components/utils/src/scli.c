@@ -34,7 +34,7 @@
 
 static TaskHandle_t cli_task;
 static int stop;
-static const char *TAG = "scli";
+static const char *TAG = "[scli]";
 
 static void scli_task(void *arg)
 {
@@ -61,8 +61,7 @@ static void scli_task(void *arg)
         memset(linebuf, 0, sizeof(linebuf));
         i = 0;
         do {
-            //ret = xQueueReceive(uart_queue, (void * )&event, (portTickType)portMAX_DELAY);
-            ret = xQueueReceive(uart_queue, (void * )&event, (portTickType) 10);
+            ret = xQueueReceive(uart_queue, (void * )&event, (portTickType)portMAX_DELAY);
             if (ret != pdPASS) {
                 if(stop == 1) {
                     break;
@@ -88,7 +87,7 @@ static void scli_task(void *arg)
         linebuf[strlen((char *)linebuf) - 1] = '\0';
         ret = esp_console_run((char *) linebuf, &cmd_ret);
         if (ret < 0) {
-            printf("Console dispatcher error\n");
+            printf("%s: Console dispatcher error\n", TAG);
             break;
         }
     }

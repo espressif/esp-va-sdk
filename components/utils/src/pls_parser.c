@@ -43,7 +43,7 @@
 #define TITLE_TAG "Title"
 #define VERSION_TAG "Version"
 
-http_playlist_t  *pls_parse(httpc_conn_t *h)
+http_playlist_t  *pls_parse(httpc_conn_t *h, const char *url)
 {
     size_t content_len = 0;
     int rec_bytes = 0, total_read = 0, remaining_bytes;
@@ -80,8 +80,7 @@ http_playlist_t  *pls_parse(httpc_conn_t *h)
         if (!strncmp(line, FILE_TAG, sizeof(FILE_TAG) - 1)) { //this line gives url
             int i = 4;
             while (line[i++] != '='); //Skip till '='
-            playlist_add_entry(playlist, line + i);
-            playlist->total_entries++;
+            playlist_add_entry(playlist, line + i, url);
         }
         line = strtok_r(NULL, delimiter, &b);
     }

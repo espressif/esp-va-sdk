@@ -25,24 +25,29 @@
 
 #include <esp_wifi.h>
 #include <esp_console.h>
+#include <esp_log.h>
 #include <wifi_provisioning/wifi_config.h>
+
+static const char *TAG = "[wifi_cli]";
 
 static int wifi_set_cli_handler(int argc, char *argv[])
 {
+    /* Just to go to the next line */
+    printf("\n");
     if (argc != 3) {
-        printf("Incorrect arguments\n");
+        printf("%s: Incorrect arguments\n", TAG);
         return 0;
     }
     /* Initialize WiFi with default config */
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     if (esp_wifi_init(&cfg) != ESP_OK) {
-        printf("Failed to init WiFi\n");
+        printf("%s: Failed to init WiFi\n", TAG);
         return 0;
     }
 
     /* Configure WiFi as station */
     if (esp_wifi_set_mode(WIFI_MODE_STA) != ESP_OK) {
-        printf("Failed to set WiFi mode\n");
+        printf("%s: Failed to set WiFi mode\n", TAG);
         return 0;
     }
 
@@ -52,17 +57,17 @@ static int wifi_set_cli_handler(int argc, char *argv[])
 
     /* Configure WiFi station with provided host credentials */
     if (esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_cfg) != ESP_OK) {
-        printf("Failed to set WiFi configuration\n");
+        printf("%s: Failed to set WiFi configuration\n", TAG);
         return 0;
     }
     /* (Re)Start WiFi */
     if (esp_wifi_start() != ESP_OK) {
-        printf("Failed to set WiFi configuration\n");
+        printf("%s: Failed to set WiFi configuration\n", TAG);
         return 0;
     }
     /* Connect to AP */
     if (esp_wifi_connect() != ESP_OK) {
-        printf("Failed to connect WiFi\n");
+        printf("%s: Failed to connect WiFi\n", TAG);
         return 0;
     }
 
@@ -82,7 +87,7 @@ int wifi_register_cli()
     int cmds_num = sizeof(wifi_cmds) / sizeof(esp_console_cmd_t);
     int i;
     for (i = 0; i < cmds_num; i++) {
-        printf("Registering command: %s\n", wifi_cmds[i].command);
+        ESP_LOGI(TAG, "Registering command: %s", wifi_cmds[i].command);
         esp_console_cmd_register(&wifi_cmds[i]);
     }
     return 0;

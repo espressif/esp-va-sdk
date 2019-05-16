@@ -72,12 +72,13 @@ static esp_err_t cmd_get_status_handler(WiFiConfigPayload *req,
     resp_get_status__init(resp_payload);
 
     wifi_prov_config_get_data_t resp_data;
-    if (h->get_status_handler(&resp_data) == ESP_OK) {
+    if (h->get_status_handler(&resp_data, &h->ctx) == ESP_OK) {
         if (resp_data.wifi_state == WIFI_PROV_STA_CONNECTING) {
             resp_payload->sta_state = WIFI_STATION_STATE__Connecting;
             resp_payload->state_case = RESP_GET_STATUS__STATE_CONNECTED;
         } else if (resp_data.wifi_state == WIFI_PROV_STA_CONNECTED) {
             resp_payload->sta_state  = WIFI_STATION_STATE__Connected;
+            resp_payload->state_case = RESP_GET_STATUS__STATE_CONNECTED;
             WifiConnectedState *connected = (WifiConnectedState *)(
                                             malloc(sizeof(WifiConnectedState)));
             if (!connected) {
@@ -134,7 +135,7 @@ static esp_err_t cmd_get_status_handler(WiFiConfigPayload *req,
 static esp_err_t cmd_set_config_handler(WiFiConfigPayload *req,
                                         WiFiConfigPayload *resp, void  *priv_data)
 {
-    ESP_LOGD(TAG, "Enter cmd_set_config_handler\n");
+    ESP_LOGD(TAG, "Enter cmd_set_config_handler");
     wifi_prov_config_handlers_t *h = (wifi_prov_config_handlers_t *) priv_data;
     if (!h) {
         ESP_LOGE(TAG, "Command invoked without handlers");
@@ -157,7 +158,7 @@ static esp_err_t cmd_set_config_handler(WiFiConfigPayload *req,
     memcpy(req_data.bssid, req->cmd_set_config->bssid.data,
            req->cmd_set_config->bssid.len);
     req_data.channel = req->cmd_set_config->channel;
-    if (h->set_config_handler(&req_data) == ESP_OK) {
+    if (h->set_config_handler(&req_data, &h->ctx) == ESP_OK) {
         resp_payload->status = STATUS__Success;
     }
 
@@ -169,7 +170,7 @@ static esp_err_t cmd_set_config_handler(WiFiConfigPayload *req,
 static esp_err_t cmd_apply_config_handler(WiFiConfigPayload *req,
                                           WiFiConfigPayload *resp, void  *priv_data)
 {
-    ESP_LOGD(TAG, "Enter cmd_apply_config_handler\n");
+    ESP_LOGD(TAG, "Enter cmd_apply_config_handler");
     wifi_prov_config_handlers_t *h = (wifi_prov_config_handlers_t *) priv_data;
     if (!h) {
         ESP_LOGE(TAG, "Command invoked without handlers");
@@ -184,7 +185,7 @@ static esp_err_t cmd_apply_config_handler(WiFiConfigPayload *req,
 
     resp_apply_config__init(resp_payload);
 
-    if (h->apply_config_handler() == ESP_OK) {
+    if (h->apply_config_handler(&h->ctx) == ESP_OK) {
         resp_payload->status = STATUS__Success;
     } else {
         resp_payload->status = STATUS__InvalidArgument;
@@ -311,7 +312,7 @@ esp_err_t wifi_prov_config_data_handler(uint32_t session_id, const uint8_t *inbu
 
     *outbuf = (uint8_t *) malloc(*outlen);
     if (!*outbuf) {
-        ESP_LOGE(TAG, "System out of memory\n");
+        ESP_LOGE(TAG, "System out of memory");
         return ESP_ERR_NO_MEM;
     }
     wi_fi_config_payload__pack(&resp, *outbuf);

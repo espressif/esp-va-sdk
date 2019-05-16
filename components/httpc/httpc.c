@@ -139,6 +139,16 @@ error:
     return NULL;
 }
 
+int http_connection_get_sockfd(httpc_conn_t *http_conn)
+{
+    if (!http_conn || !http_conn->tls) {
+        ESP_LOGE(TAG, "Invalid parameters!");
+        return -1;
+    }
+    /* XXX: Some implicit knowledge here? Need to do it properly */
+    return http_conn->tls->sockfd;
+}
+
 void http_connection_delete(httpc_conn_t *httpc)
 {
     if (httpc->host) {
@@ -200,9 +210,11 @@ static int http_request_send_our_hdr(httpc_conn_t *httpc, size_t data_len)
     char *hdr;
     switch (httpc->request.op) {
     case ESP_HTTP_GET: {
-#define GET_DATA_TEMPLATE                       \
+#define GET_DATA_TEMPLATE               \
 "GET %s HTTP/1.1\r\n"                   \
-"Host: %s\r\n\r\n"
+"User-Agent: ESP32 HTTP Client/1.0\r\n" \
+"Host: %s\r\n\r\n"                      \
+
         int hdr_len = strlen(GET_DATA_TEMPLATE) + strlen(httpc->request.url) +
                       strlen(httpc->host) + 1;
         hdr = (char *)calloc(1, hdr_len);

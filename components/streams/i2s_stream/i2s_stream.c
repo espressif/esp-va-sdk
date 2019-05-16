@@ -47,7 +47,7 @@ static esp_err_t parse_i2s_config(void *base_stream)
     i2s_stream_config_t *cfg = &stream->cfg;
 
     ret = i2s_driver_install(cfg->i2s_num, &cfg->i2s_config, 0, NULL);
-    printf(".......................Init i2s stream...............\n");
+    ESP_LOGI(I2STAG, ".......................Init i2s stream...............\n");
     if (ret != ESP_OK) {
         ESP_LOGE(I2STAG, "Error installing i2s driver for stream %s", stream->base.label);
     } else {

@@ -129,6 +129,7 @@ static inline char *http_response_get_redirect_location(httpc_conn_t *httpc)
 int http_request_send_custom_hdr(httpc_conn_t *httpc, const char *hdr);
 int http_send_chunk(httpc_conn_t *httpc, const char *data, size_t data_len);
 int http_send_last_chunk(httpc_conn_t *httpc);
+int http_connection_get_sockfd(httpc_conn_t *http_conn);
 
 #ifdef __cplusplus
 }

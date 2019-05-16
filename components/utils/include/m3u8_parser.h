@@ -28,6 +28,6 @@
 #include <httpc.h>
 #include <http_playlist.h>
 
-http_playlist_t *m3u8_parse(httpc_conn_t *h, int *offset_in_ms);
+http_playlist_t *m3u8_parse(httpc_conn_t *h, const char *url, int *offset_in_ms);
 
 #endif  /* _M3U8_PARSER_H_ */

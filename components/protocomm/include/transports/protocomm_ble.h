@@ -19,7 +19,7 @@
 /**
  * BLE device name cannot be larger than this value
  */
-#define MAX_BLE_DEVNAME_LEN 13
+#define MAX_BLE_DEVNAME_LEN 17
 
 /**
  * @brief   This structure maps handler required by protocomm layer to

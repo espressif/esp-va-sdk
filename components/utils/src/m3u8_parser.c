@@ -43,9 +43,11 @@
 /* This tag tells us which is the first tag in the playlist */
 #define MEDIASEQUENCE_TAG "#EXT-X-MEDIA-SEQUENCE"
 
-http_playlist_t  *m3u8_parse(httpc_conn_t *h, int *offset)
+#define DEFAULT_CONTENT_LENGTH (16 * 1024)
+
+http_playlist_t *m3u8_parse(httpc_conn_t *h, const char *url, int *offset)
 {
-    size_t content_len = 0;
+    int content_len = 0;
     int offset_in_ms = 0;
     if (!h) {
         ESP_LOGE(M3U8, "http connecction handle is NULL");
@@ -71,6 +73,7 @@ http_playlist_t  *m3u8_parse(httpc_conn_t *h, int *offset)
 
     content_len = http_response_get_content_len(h);
     ESP_LOGI(M3U8, "Content len is %d", content_len);
+    content_len = content_len > 0 ? content_len : DEFAULT_CONTENT_LENGTH;
 
     char *buf = (char *) esp_audio_mem_calloc(1, content_len + 1);
     remaining_bytes = content_len;
@@ -81,6 +84,10 @@ http_playlist_t  *m3u8_parse(httpc_conn_t *h, int *offset)
         }
         remaining_bytes -= rec_bytes;
         total_read += rec_bytes;
+    }
+
+    if (__builtin_expect(rec_bytes > 0 && remaining_bytes < 0, false)) {
+        ESP_LOGI(M3U8, "buffer of %d bytes was not enough! Song may cut short!", DEFAULT_CONTENT_LENGTH);
     }
 
     char *line, *b;
@@ -100,26 +107,30 @@ http_playlist_t  *m3u8_parse(httpc_conn_t *h, int *offset)
                 break;
             }
             line = strtok_r(NULL, "\n", &b);
+            if (!line || (flag && !strncmp(line, "#", 1))) {
+                continue;
+            }
             if (flag) {
                 if (!stop_skip && offset_in_ms) {
                     offset_in_ms -= 1000 * duration;
                     if (offset_in_ms < 0) {
                         offset_in_ms += 1000 * duration; //restore back
                         stop_skip = true;
-                        playlist_add_entry(playlist, line);
-                        playlist->total_entries++;
+                        playlist_add_entry(playlist, line, url);
                     }
                 } else {
-                    playlist_add_entry(playlist, line);
-                    playlist->total_entries++;
+                    playlist_add_entry(playlist, line, url);
                 }
                 flag = 0;
             }
         }
     } else { //Not EXTM3U, has listed urls. Keep adding to url list
         while (line != NULL) {
-            playlist_add_entry(playlist, line);
-            playlist->total_entries++;
+            if (!strncmp(line, "#", 1)) {
+                //This is comment in playlist! Neglect this line and look next line
+            } else {
+                playlist_add_entry(playlist, line, url);
+            }
             line = strtok_r(NULL, "\n", &b);
         }
     }

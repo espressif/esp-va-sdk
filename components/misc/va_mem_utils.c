@@ -28,7 +28,7 @@
 
 #include <stdio.h>
 
-static const char *TAG = "[mem-op]";
+static const char *TAG = "[va_mem_utils]";
 
 enum va_mem_alloc_op {
     MALLOC,
@@ -82,9 +82,9 @@ static void *va_mem_alloc_op(void *ptr, size_t size, enum va_mem_region region, 
 
 #ifdef CONFIG_VA_MEM_DEBUG
     if (nptr) {
-        printf("%s %p: %s %d bytes from RAM %d\n", TAG, nptr, op == REALLOC ? "Reallocated" : "Allocated", size, region);
+        printf("%s: %p: %s %d bytes from RAM %d\n", TAG, nptr, op == REALLOC ? "Reallocated" : "Allocated", size, region);
     } else {
-        printf("%s Failed to %s %d bytes from RAM %d\n", TAG, op == REALLOC ? "reallocate" : "allocate", size, region);
+        printf("%s: Failed to %s %d bytes from RAM %d\n", TAG, op == REALLOC ? "reallocate" : "allocate", size, region);
     }
     va_mem_print_stats(TAG);
 #endif /* CONFIG_VA_MEM_DEBUG */
@@ -93,15 +93,15 @@ static void *va_mem_alloc_op(void *ptr, size_t size, enum va_mem_region region, 
 
 void va_mem_print_stats(const char *event)
 {
-    printf("%s INTERNAL-> Available: %d, Largest free block: %d\n", event, heap_caps_get_free_size(MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL), heap_caps_get_largest_free_block(MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL));
-    printf("%s EXTERNAL-> Available: %d, Largest free block: %d\n", event, heap_caps_get_free_size(MALLOC_CAP_SPIRAM), heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM));
+    printf("%s: INTERNAL-> Available: %d, Largest free block: %d\n", event, heap_caps_get_free_size(MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL), heap_caps_get_largest_free_block(MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL));
+    printf("%s: EXTERNAL-> Available: %d, Largest free block: %d\n", event, heap_caps_get_free_size(MALLOC_CAP_SPIRAM), heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM));
 }
 
 void va_mem_free(void *ptr)
 {
     heap_caps_free(ptr);
 #ifdef CONFIG_VA_MEM_DEBUG
-    printf("%s %p: Freed memory\n", TAG, ptr);
+    printf("%s: %p: Freed memory\n", TAG, ptr);
     va_mem_print_stats(TAG);
 #endif /* CONFIG_VA_MEM_DEBUG */
 }

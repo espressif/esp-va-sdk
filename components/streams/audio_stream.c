@@ -117,27 +117,27 @@ static void audio_stream_task(void *arg)
             if (stream->type == STREAM_TYPE_WRITER) {
                 r_len = stream->op.stream_input.func(stream->op.stream_input.arg, stream->buf, stream->cfg.buf_size, stream->cfg.w.input_wait);
                 if (r_len > 0) {
-		    //		    printf("stream: writing %d to write function\n", r_len);
+                    // printf("%s: stream: writing %d to write function\n", ASTAG, r_len);
                     w_len = stream->cfg.derived_write((void *)stream, stream->buf, r_len);
                 }
             } else { /* STREAM_TYPE_READER */
                 r_len = stream->cfg.derived_read((void *)stream, stream->buf, stream->cfg.buf_size);
-		if (r_len > 0) {
-		    /* In some cases the reader streams may return '0' indicating no data 'currently available. But
-		     * sending '0' to the output_func may make it think that and end of stream has been reached.
-		     * Instead, we treat '0' as a no-op, and go through the loop again.
-		     * If a value < 0 was received, we will anyway break from the loop, and send a end-of-stream (0)
-		     * output-func below.
-		     */
-		    w_len = stream->op.stream_output.func(stream->op.stream_output.arg, stream->buf, r_len, stream->cfg.w.output_wait);
-		}
+                if (r_len > 0) {
+                    /* In some cases the reader streams may return '0' indicating no data 'currently available. But
+                     * sending '0' to the output_func may make it think that and end of stream has been reached.
+                     * Instead, we treat '0' as a no-op, and go through the loop again.
+                     * If a value < 0 was received, we will anyway break from the loop, and send a end-of-stream (0)
+                     * output-func below.
+                     */
+                    w_len = stream->op.stream_output.func(stream->op.stream_output.arg, stream->buf, r_len, stream->cfg.w.output_wait);
+                }
             }
             if (r_len < 0 || w_len < 0) {
                 if (r_len == -3) {
                     /* We got a reader wakeup from outside */
                     continue;
                 }
-		        printf("r_len = %d w_len = %d, stopping stream [%s]\n", r_len, w_len, stream->label);
+		        ESP_LOGI(ASTAG, "r_len = %d w_len = %d, stopping stream [%s]", r_len, w_len, stream->label);
                 stream->_run = 0;
             }
             if (stream->_pause || stream->_destroy) {
@@ -160,7 +160,7 @@ static void audio_stream_task(void *arg)
                 stream->cfg.derived_context_cleanup(stream);
             }
             audio_stream_generate_event(stream, STREAM_EVENT_STOPPED);
-	    printf("Generated stopped event for stream %s\n", stream->label);
+	    ESP_LOGI(ASTAG, "Generated stopped event for stream %s", stream->label);
         }
     }
     ESP_LOGI(ASTAG, "Destroying stream %s", stream->label);
@@ -283,7 +283,7 @@ audio_stream_state_t audio_stream_get_state(audio_stream_t *stream)
 
 esp_err_t audio_stream_start(audio_stream_t *stream)
 {
-    printf("Starting audio stream %s\n", stream->label);
+    ESP_LOGI(ASTAG, "Starting audio stream %s", stream->label);
     stream->_run = 1;
     stream->_pause = 0;
     memset(stream->buf, 0, stream->cfg.buf_size);
@@ -293,7 +293,7 @@ esp_err_t audio_stream_start(audio_stream_t *stream)
 
 esp_err_t audio_stream_stop(audio_stream_t *stream)
 {
-    printf("Stopping audio stream %s\n", stream->label);
+    ESP_LOGI(ASTAG, "Stopping audio stream %s", stream->label);
     stream->_run = 0;
     stream->_pause = 0;
     xSemaphoreGive(stream->ctrl_sem);
@@ -302,14 +302,14 @@ esp_err_t audio_stream_stop(audio_stream_t *stream)
 
 esp_err_t audio_stream_pause(audio_stream_t *stream)
 {
-    printf("Pausing audio stream %s\n", stream->label);
+    ESP_LOGI(ASTAG, "Pausing audio stream %s", stream->label);
     stream->_pause = 1;
     return ESP_OK;
 }
 
 esp_err_t audio_stream_resume(audio_stream_t *stream)
 {
-    printf("Resuming audio stream %s\n", stream->label);
+    ESP_LOGI(ASTAG, "Resuming audio stream %s", stream->label);
     stream->_pause = 0;
     xSemaphoreGive(stream->ctrl_sem);
     return ESP_OK;

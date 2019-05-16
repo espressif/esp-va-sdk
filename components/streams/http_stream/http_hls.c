@@ -39,13 +39,15 @@
  * MIME_TYPE_APPLE  - m3u
  * MIME_TYPE_XSCPLS - pls
  */
-#define MIME_TYPE_XMPEG     "audio/x-mpegurl; charset=utf-8"
-#define MIME_TYPE_APPLE     "application/vnd.apple.mpegurl"
-#define MIME_TYPE_XSCPLS    "audio/x-scpls"
+#define MIME_TYPE_APP_XMPEG     "application/x-mpegurl"
+#define MIME_TYPE_AUDIO_XMPEG   "audio/x-mpegurl; charset=utf-8"
+#define MIME_TYPE_APPLE         "application/vnd.apple.mpegurl"
+#define MIME_TYPE_XSCPLS        "audio/x-scpls"
 
 static void set_mime_type(http_stream_hls_config_t *hls_cfg, const char *mime_type)
 {
-    if (!strncmp(mime_type, MIME_TYPE_XMPEG, strlen(MIME_TYPE_XMPEG))) {
+    if (!strncmp(mime_type, MIME_TYPE_AUDIO_XMPEG, strlen(MIME_TYPE_AUDIO_XMPEG)) ||
+        !strncmp(mime_type, MIME_TYPE_APP_XMPEG, strlen(MIME_TYPE_APP_XMPEG))) {
         hls_cfg->mime_type = MPEG_URL;
     } else if (!strncmp(mime_type, MIME_TYPE_APPLE, strlen(MIME_TYPE_APPLE))) {
         hls_cfg->mime_type = APPLE_URL;
@@ -57,7 +59,7 @@ static void set_mime_type(http_stream_hls_config_t *hls_cfg, const char *mime_ty
     }
 }
 
-int http_hls_identify_and_init_playlist(http_stream_hls_config_t *hls_cfg, const char *mime_type, httpc_conn_t *base_conn_handle)
+int http_hls_identify_and_init_playlist(http_stream_hls_config_t *hls_cfg, const char *mime_type, httpc_conn_t *base_conn_handle, char *url)
 {
     set_mime_type(hls_cfg, mime_type);
     if (hls_cfg->variant_playlist) {
@@ -71,13 +73,13 @@ int http_hls_identify_and_init_playlist(http_stream_hls_config_t *hls_cfg, const
     switch (hls_cfg->mime_type) {
     case APPLE_URL:
     case MPEG_URL:
-        hls_cfg->variant_playlist = m3u8_parse(base_conn_handle, NULL);
+        hls_cfg->variant_playlist = m3u8_parse(base_conn_handle, url, NULL);
         break;
     case XSCPLS_URL:
-        hls_cfg->variant_playlist = pls_parse(base_conn_handle);
+        hls_cfg->variant_playlist = pls_parse(base_conn_handle, url);
         break;
     default:
-        ESP_LOGI(TAG, "Unsupported MIME type: %d", hls_cfg->mime_type);
+        ESP_LOGI(TAG, "Not a playlist. Could be direct URL");
         return ESP_FAIL;
     }
 
@@ -109,7 +111,6 @@ const char *http_hls_connect_new_variant(void *stream)
         hstream->handle = NULL;
         return NULL;
     }
-    ESP_LOGI(TAG, "Variant Stream - %s\n", url);
 
     /* Delete existing connection and create new one with new url. */
     free(hstream->cfg.url);
@@ -126,17 +127,22 @@ const char *http_hls_connect_new_variant(void *stream)
     switch (type) {
     case APPLE_URL:
     case MPEG_URL:
-        hls_cfg->media_playlist = m3u8_parse(hstream->handle, &hstream->cfg.offset_in_ms);
+        hls_cfg->media_playlist = m3u8_parse(hstream->handle, hstream->cfg.url, &hstream->cfg.offset_in_ms);
         break;
     case XSCPLS_URL:
-        hls_cfg->media_playlist = pls_parse(hstream->handle);
+        hls_cfg->media_playlist = pls_parse(hstream->handle, hstream->cfg.url);
         break;
     default:
+        ESP_LOGI(TAG, "Previous playlist was not variant! Move variant to media!");
+        hls_cfg->media_playlist = hls_cfg->variant_playlist;
+        hls_cfg->variant_playlist = NULL;
         return content_type;
     }
 
     if (!hls_cfg->media_playlist) {
         return NULL;
+    } else {
+        ESP_LOGI(TAG, "Resolved variant Stream - %s", url);
     }
 
     url = playlist_get_next_entry(hls_cfg->media_playlist);

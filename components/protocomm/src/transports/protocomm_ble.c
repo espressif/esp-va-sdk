@@ -22,7 +22,7 @@
 #include "protocomm_priv.h"
 #include "simple_ble.h"
 
-#define CHAR_VAL_LEN_MAX         (256 + 1)
+#define CHAR_VAL_LEN_MAX         (512 + 1)
 #define PREPARE_BUF_MAX_SIZE     CHAR_VAL_LEN_MAX
 
 static const char *TAG = "protocomm_ble";

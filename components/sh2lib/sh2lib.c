@@ -25,7 +25,7 @@
 
 #include "sh2lib.h"
 
-static const char *TAG = "sh2lib";
+static const char *TAG = "[sh2lib]";
 
 #define DBG_FRAME_SEND 1
 
@@ -162,7 +162,7 @@ static int callback_on_frame_recv(nghttp2_session *session,
     if (frame->hd.type == NGHTTP2_GOAWAY) {
         struct sh2lib_handle *hd = (struct sh2lib_handle *)user_data;
         if (hd->go_away_cb) {
-            printf("GOAWAY received: Invoking application's callback");
+            printf("%s: goaway received: Invoking application's callback", TAG);
             hd->go_away_cb(hd);
         }
     }

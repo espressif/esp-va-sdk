@@ -26,7 +26,7 @@
 
 #include "protocomm_priv.h"
 
-static const char *TAG = "protocomm_console";
+static const char *TAG = "[protocomm_console]";
 
 static uint32_t session_id = PROTOCOMM_NO_SESSION_ID;
 static protocomm_t *pc_console   = NULL; /* The global protocomm instance for console */
@@ -160,11 +160,11 @@ static int common_cmd_handler(int argc, char** argv)
     free(buf);
 
     if (ret == ESP_OK) {
-        printf("\r\n");
+        ESP_LOGI(TAG, "\r\n");
         for (i = 0; i < outlen; i++) {
-            printf("%02x", outbuf[i]);
+            ESP_LOGI(TAG, "%02x", outbuf[i]);
         }
-        printf("\r\n");
+        ESP_LOGI(TAG, "\r\n");
 
         /* Transport is responsible for freeing the transmit buffer */
         free(outbuf);

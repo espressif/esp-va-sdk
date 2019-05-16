@@ -34,23 +34,65 @@
 #include <http_playback_stream.h>
 #include <http_playlist.h>
 #include <esp_audio_mem.h>
+#include <string.h>
 
 #define TAG   "HTTP_PLAYLIST"
 
-esp_err_t playlist_add_entry(http_playlist_t *playlist, char *line)
+esp_err_t playlist_add_entry(http_playlist_t *playlist, char *line, const char *host_url)
 {
+    char *tmp_str = NULL;
     playlist_entry_t *new = (playlist_entry_t *) malloc(sizeof(playlist_entry_t));
     if (new == NULL) {
         ESP_LOGE(TAG, "Not enough memory for malloc");
         return ESP_ERR_NO_MEM;
     }
-    new->uri = esp_audio_mem_strdup(line);
+    if (strncmp(line, "http", 4)) { //This is not a full URI
+        if (!strncmp(line, "//", 2)) { //Schemelesss URI
+            ESP_LOGE(TAG, "Schemeless uri not supported yet! line = %s", line);
+            goto add_entry_err1;
+        } else { //Relative URI
+            tmp_str = strdup(host_url);
+            if (!tmp_str) {
+                ESP_LOGE(TAG, "strdup failed");
+                goto add_entry_err1;
+            }
+            char *pos = strrchr(tmp_str, '/'); //Search for last "/"
+            if (!pos) { //'/' not found case
+                goto add_entry_err2;
+            }
+            pos[1] = 0;
+            asprintf(&(new->uri), "%s%s", tmp_str, line);
+            free(tmp_str);
+        }
+    } else {
+        new->uri = esp_audio_mem_strdup(line);
+    }
+
+    playlist_entry_t *find = NULL;
+    STAILQ_FOREACH(find, &playlist->head, entries) {
+        if (strcmp(find->uri, new->uri) == 0) {
+            ESP_LOGW(TAG, "URI exist");
+            free(new->uri);
+            free(new);
+            return ESP_OK;
+        }
+    }
+
     STAILQ_INSERT_TAIL(&playlist->head, new, entries);
+    playlist->total_entries++;
     return ESP_OK;
+add_entry_err2:
+    free(tmp_str);
+add_entry_err1:
+    free(new);
+    return ESP_FAIL;
 }
 
 esp_err_t playlist_free(http_playlist_t *playlist)
 {
+    if (!playlist) {
+        return ESP_FAIL;
+    }
     playlist_entry_t *datap, *temp;
     STAILQ_FOREACH_SAFE(datap, &playlist->head, entries, temp) {
         free(datap->uri);
@@ -62,6 +104,9 @@ esp_err_t playlist_free(http_playlist_t *playlist)
 
 char *playlist_get_next_entry(http_playlist_t *playlist)
 {
+    if (!playlist) {
+        return NULL;
+    }
     playlist_entry_t *temp = NULL;
     char *uri;
     temp = STAILQ_FIRST(&playlist->head);

@@ -32,8 +32,9 @@
 #include <nvs.h>
 #include <scli.h>
 #include <diag_cli.h>
+#include <voice_assistant.h>
 
-static const char *TAG = "diag";
+static const char *TAG = "[va_diag_cli]";
 
 static void hex_dump(uint8_t *data, int length)
 {
@@ -52,34 +53,37 @@ static int nvs_get_cli_handler(int argc, char *argv[])
     const char *variable = argv[2];
     const char *type = argv[3];
     size_t val_length = 0;
+
+    /* Just to go to the next line */
+    printf("\n");
     if (argc != 4) {
-        printf("Incorrect arguments\n");
+        ESP_LOGE(TAG, "Incorrect arguments");
         return 0;
     }
     if (strcmp(type, "string") == 0) {
         avs_nvs_get_str(namespace, variable, NULL, &val_length);
         if (val_length == 0) {
-            printf("Variable with 0 length\n");
+            printf("%s: Variable with 0 length\n", TAG);
             return 0;
         } else {
             char *value = va_mem_alloc(val_length, VA_MEM_EXTERNAL);
             if (value == NULL) {
-                printf("Memory allocation failed");
+                printf("%s: Memory allocation failed", TAG);
                 return 0;
             }
             avs_nvs_get_str(namespace, variable, value, &val_length);
-            printf("%s\n", value);
+            printf("\n%s\n", value);
             va_mem_free(value);
         }
     } else if (strcmp(type, "blob") == 0) {
         avs_nvs_get_blob(namespace, variable, NULL, &val_length);
         if (val_length == 0) {
-            printf("Variable with 0 length\n");
+            printf("%s: Variable with 0 length\n", TAG);
             return 0;
         } else {
             uint8_t *value = va_mem_alloc(val_length, VA_MEM_EXTERNAL);
             if (value == NULL) {
-                printf("Memory allocation failed");
+                printf("%s: Memory allocation failed", TAG);
                 return 0;
             }
             avs_nvs_get_blob(namespace, variable, value, &val_length);
@@ -88,11 +92,16 @@ static int nvs_get_cli_handler(int argc, char *argv[])
         }
     } else if (strcmp(type, "i8") == 0) {
         int8_t value;
-        avs_nvs_get_i8(namespace, variable, (uint8_t *)&value);
-        printf("%d\n", value);
+        avs_nvs_get_i8(namespace, variable, &value);
+        printf("\n%d\n", value);
+        return 0;
+    } else if (strcmp(type, "u16") == 0) {
+        uint16_t value;
+        avs_nvs_get_u16(namespace, variable, &value);
+        printf("\n%u\n", value);
         return 0;
     } else {
-        printf("Incorrect argument\n");
+        ESP_LOGE(TAG, "Incorrect argument");
     }
     return 0;
 }
@@ -104,8 +113,10 @@ static int nvs_set_cli_handler(int argc, char *argv[])
     const char *type = argv[3];
     char *value = argv[4];
 
+    /* Just to go to the next line */
+    printf("\n");
     if (argc != 5) {
-        printf("Incorrect arguments\n");
+        ESP_LOGE(TAG, "Incorrect arguments");
         return 0;
     }
     if (strcmp(type, "string") == 0) {
@@ -118,35 +129,60 @@ static int nvs_set_cli_handler(int argc, char *argv[])
             return -1;
         }
         avs_nvs_set_i8(namespace, variable, val);
+    } else if (strcmp(type, "u16") == 0) {
+        uint16_t val;
+        val = (uint16_t)atoi((const char *)value);
+        if (val == 0 && *value != 0x30) {
+            ESP_LOGE(TAG, "Invalid value");
+            return -1;
+        }
+        avs_nvs_set_u16(namespace, variable, val);
     } else if (strcmp(type, "blob") == 0) {
-        printf("Not yet supported\n");
+        ESP_LOGE(TAG, "Not yet supported");
     } else {
-        printf("Incorrect argument\n");
+        ESP_LOGE(TAG, "Incorrect argument");
     }
     return 0;
 }
 
 static int nvs_erase_cli_handler(int argc, char *argv[])
 {
+    /* Just to go to the next line */
+    printf("\n");
     avs_nvs_flash_erase();
     return 0;
 }
 
 static int reboot_cli_handler(int argc, char *argv[])
 {
+    /* Just to go to the next line */
+    printf("\n");
+    va_reset();
     esp_restart();
+    return 0;
+}
+
+static int crash_cli_handler(int argc, char *argv[])
+{
+    /* Just to go to the next line */
+    printf("\n");
+    printf("%s: Crash the device by null dereference.\n", TAG);
+    char *a = NULL;
+    char b = *a;
+    /* Adding this print so that compiler does not optimise 'b'. */
+    printf("%c\n", b);
     return 0;
 }
 
 static esp_console_cmd_t diag_cmds[] = {
     {
         .command = "nvs-get",
-        .help = "<namespace> <variable> <string|blob>",
+        .help = "<namespace> <variable> <string|blob|i8|u16>",
         .func = nvs_get_cli_handler,
     },
     {
         .command = "nvs-set",
-        .help = "<namespace> <variable> <string|blob> <value>",
+        .help = "<namespace> <variable> <string|i8|u16> <value>",
         .func = nvs_set_cli_handler,
     },
     {
@@ -158,6 +194,11 @@ static esp_console_cmd_t diag_cmds[] = {
         .command = "reboot",
         .help = " ",
         .func = reboot_cli_handler,
+    },
+    {
+        .command = "crash",
+        .help = " ",
+        .func = crash_cli_handler,
     }
 };
 
@@ -167,9 +208,8 @@ int va_diag_register_cli()
     int cmds_num = sizeof(diag_cmds) / sizeof(esp_console_cmd_t);
     int i;
     for (i = 0; i < cmds_num; i++) {
-        printf("Registering command: %s \n", diag_cmds[i].command);
+        ESP_LOGI(TAG, "Registering command: %s", diag_cmds[i].command);
         esp_console_cmd_register(&diag_cmds[i]);
     }
     return 0;
 }
-

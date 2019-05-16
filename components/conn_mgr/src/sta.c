@@ -19,7 +19,7 @@
 #include <esp_log.h>
 #include <freertos/event_groups.h>
 
-static const char *TAG = "sm_sta";
+static const char *TAG = "[sta]";
 
 static int do_sta_start()
 {
@@ -32,7 +32,7 @@ static int do_sta_start()
         return ESP_ERR_CONN_MGR_STA_CFG;
     }
 
-    ESP_LOGI(TAG, "Connecting to SSID: %s", wifi_cfg.sta.ssid);
+    printf("%s: Connecting to ssid: %s\n", TAG, wifi_cfg.sta.ssid);
 
     if (g_conn_mgr.softap_enabled == true) {
         mode = WIFI_MODE_APSTA;

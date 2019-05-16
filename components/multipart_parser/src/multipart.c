@@ -29,6 +29,8 @@ This file has the function definations required for the multipart parser
 #include <stdio.h>
 #include <multipart.h>
 
+static const char *TAG = "[multipart]";
+
 /* Initialize the handle */
 void multipart_init(multipart_handle_t *handle, char *boundary)
 {
@@ -142,7 +144,7 @@ int multipart_parse_data(multipart_handle_t *handle, multipart_callbacks_t *cbs,
             } else if (buffer[handle->iterator] == '-') {
                 handle->state = stream_almost_over;
             } else {
-                printf("Found boundary in data. Incorrect data.\n");
+                printf("%s: Found boundary in data. Incorrect data.\n", TAG);
             }
             break;
 
@@ -150,7 +152,7 @@ int multipart_parse_data(multipart_handle_t *handle, multipart_callbacks_t *cbs,
             if (buffer[handle->iterator] == '\n') {
                 handle->state = finding_next_char;
             } else {
-                printf("No LF after CR.\n");
+                printf("%s: No LF after CR.\n", TAG);
             }
             break;
 

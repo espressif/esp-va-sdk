@@ -32,11 +32,13 @@
 #include <esp_audio_mem.h>
 #include <string.h>
 
-static const char *TAG = "diag";
+static const char *TAG = "[diag_cli]";
 static int task_dump_cli_handler(int argc, char *argv[])
 {
     int num_of_tasks = uxTaskGetNumberOfTasks();
     TaskStatus_t *task_array = esp_audio_mem_calloc(1, num_of_tasks * sizeof(TaskStatus_t));
+    /* Just to go to the next line */
+    printf("\n");
     if (!task_array) {
         ESP_LOGE(TAG, "Memory not allocated for task list.");
         return 0;
@@ -56,12 +58,14 @@ static int task_dump_cli_handler(int argc, char *argv[])
 
 static int cpu_dump_cli_handler(int argc, char *argv[])
 {
+    /* Just to go to the next line */
+    printf("\n");
 #ifndef CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS
-    printf("To use this utility enable: Component config --> FreeRTOS --> Enable FreeRTOS to collect run time stats\n");
+    printf("%s: To use this utility enable: Component config --> FreeRTOS --> Enable FreeRTOS to collect run time stats\n", TAG);
 #else
     char *buf = esp_audio_mem_calloc(1, 2 * 1024);
     vTaskGetRunTimeStats(buf);
-    printf("Run Time Stats:\n%s\n", buf);
+    printf("%s: Run Time Stats:\n%s\n", TAG, buf);
     esp_audio_mem_free(buf);
 #endif
     return 0;
@@ -69,6 +73,8 @@ static int cpu_dump_cli_handler(int argc, char *argv[])
 
 static int mem_dump_cli_handler(int argc, char *argv[])
 {
+    /* Just to go to the next line */
+    printf("\n");
     printf("\tDescription\tInternal\tSPIRAM\n");
     printf("Current Free Memory\t%d\t\t%d\n",
            heap_caps_get_free_size(MALLOC_CAP_8BIT) - heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
@@ -87,19 +93,21 @@ static int heap_trace_records;
 static heap_trace_record_t *heap_trace_records_buf;
 static void cli_heap_trace_start()
 {
+    /* Just to go to the next line */
+    printf("\n");
     if (!heap_trace_records_buf) {
         heap_trace_records_buf = malloc(heap_trace_records * sizeof(heap_trace_record_t));
         if (!heap_trace_records_buf) {
-            printf("Failed to allocate records buffer\n");
+            printf("%s: Failed to allocate records buffer\n", TAG);
             return;
         }
         if (heap_trace_init_standalone(heap_trace_records_buf, heap_trace_records) != ESP_OK) {
-            printf("Failed to initialise tracing\n");
+            printf("%s: Failed to initialise tracing\n", TAG);
             goto error1;
         }
     }
     if (heap_trace_start(HEAP_TRACE_LEAKS) != ESP_OK) {
-        printf("Failed to start heap trace\n");
+        printf("%s: Failed to start heap trace\n", TAG);
         goto error2;
     }
     return;
@@ -113,8 +121,10 @@ error1:
 
 static void cli_heap_trace_stop()
 {
+    /* Just to go to the next line */
+    printf("\n");
     if (!heap_trace_records_buf) {
-        printf("Tracing not started?\n");
+        printf("%s: Tracing not started?\n", TAG);
         return;
     }
     heap_trace_stop();
@@ -127,11 +137,13 @@ static void cli_heap_trace_stop()
 
 static int heap_trace_cli_handler(int argc, char *argv[])
 {
+    /* Just to go to the next line */
+    printf("\n");
 #ifndef CONFIG_HEAP_TRACING
-    printf("To use this utility enable: Component config --> Heap memory debugging --> Enable heap tracing\n");
+    printf("%s: To use this utility enable: Component config --> Heap memory debugging --> Enable heap tracing\n", TAG);
 #else
     if (argc < 2) {
-        printf("Incorrect arguments\n");
+        printf("%s: Incorrect arguments\n", TAG);
         return 0;
     }
     if (strcmp(argv[1], "start") == 0) {
@@ -141,12 +153,12 @@ static int heap_trace_cli_handler(int argc, char *argv[])
         } else {
             heap_trace_records = atoi(argv[2]);
         }
-        printf("Using a buffer to trace %d records\n", heap_trace_records);
+        printf("%s: Using a buffer to trace %d records\n", TAG, heap_trace_records);
         cli_heap_trace_start();
     } else if (strcmp(argv[1], "stop") == 0) {
         cli_heap_trace_stop();
     } else {
-        printf("Invalid argument:%s:\n", argv[1]);
+        printf("%s: Invalid argument:%s:\n", TAG, argv[1]);
     }
 #endif
     return 0;
@@ -180,7 +192,7 @@ int diag_register_cli()
     int cmds_num = sizeof(diag_cmds) / sizeof(esp_console_cmd_t);
     int i;
     for (i = 0; i < cmds_num; i++) {
-        printf("Registering command: %s \n", diag_cmds[i].command);
+        ESP_LOGI(TAG, "Registering command: %s", diag_cmds[i].command);
         esp_console_cmd_register(&diag_cmds[i]);
     }
     return 0;

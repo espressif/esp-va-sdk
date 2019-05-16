@@ -64,7 +64,8 @@ ringbuf_t *rb_init(const char *name, uint32_t size)
     r->lock = xSemaphoreCreateMutex();
     assert(r->lock);
 
-    r->abort = 0;
+    r->abort_read = 0;
+    r->abort_write = 0;
     r->writer_finished = 0;
     r->reader_unblock = 0;
 
@@ -84,67 +85,63 @@ void rb_cleanup(ringbuf_t *rb)
     free(rb);
 }
 
-static void _rb_reset(ringbuf_t *rb, int abort_val)
+/*
+ * @brief: get the number of filled bytes in the buffer
+ */
+ssize_t rb_filled(ringbuf_t *rb)
 {
-    if (rb == NULL) {
-        return;
-    }
-    rb->readptr = rb->writeptr = rb->base;
-    rb->fill_cnt = 0;
-    rb->writer_finished = 0;
-    rb->reader_unblock = 0;
-    rb_abort(rb, abort_val);
-}
-
-void rb_reset(ringbuf_t *rb)
-{
-    return _rb_reset(rb, 0);
-}
-
-void rb_reset_and_abort(ringbuf_t *rb)
-{
-    return _rb_reset(rb, 1);
+    return rb->fill_cnt;
 }
 
 /*
  * @brief: get the number of empty bytes available in the buffer
  */
-ssize_t rb_available(ringbuf_t *r)
+ssize_t rb_available(ringbuf_t *rb)
 {
-    ESP_LOGD(RB_TAG, "rb leftover %d bytes", r->size - r->fill_cnt);
-    return (r->size - r->fill_cnt);
+    ESP_LOGD(RB_TAG, "rb leftover %d bytes", rb->size - rb->fill_cnt);
+    return (rb->size - rb->fill_cnt);
 }
 
-int rb_read(ringbuf_t *r, uint8_t *buf, int buf_len, uint32_t ticks_to_wait)
+int rb_read(ringbuf_t *rb, uint8_t *buf, int buf_len, uint32_t ticks_to_wait)
 {
     int read_size;
     int total_read_size = 0;
 
-    xSemaphoreTake(r->lock, portMAX_DELAY);
+    /**
+     * In case where we are able to read buf_len in one go,
+     * we are not able to check for abort and keep returning buf_len as bytes read.
+     * Check for argument validity check and abort case before entering memcpy loop.
+     */
+
+    if (rb == NULL || rb->abort_read == 1) {
+        return ESP_FAIL;
+    }
+
+    xSemaphoreTake(rb->lock, portMAX_DELAY);
 
     while (buf_len) {
-        if (r->fill_cnt < buf_len) {
-            read_size = r->fill_cnt;
+        if (rb->fill_cnt < buf_len) {
+            read_size = rb->fill_cnt;
         } else {
             read_size = buf_len;
         }
-        if ((r->readptr + read_size) > (r->base + r->size)) {
-            int rlen1 = r->base + r->size - r->readptr;
+        if ((rb->readptr + read_size) > (rb->base + rb->size)) {
+            int rlen1 = rb->base + rb->size - rb->readptr;
             int rlen2 = read_size - rlen1;
             if (buf) {
-                memcpy(buf, r->readptr, rlen1);
-                memcpy(buf + rlen1, r->base, rlen2);
+                memcpy(buf, rb->readptr, rlen1);
+                memcpy(buf + rlen1, rb->base, rlen2);
             }
-            r->readptr = r->base + rlen2;
+            rb->readptr = rb->base + rlen2;
         } else {
             if (buf) {
-                memcpy(buf, r->readptr, read_size);
+                memcpy(buf, rb->readptr, read_size);
             }
-            r->readptr = r->readptr + read_size;
+            rb->readptr = rb->readptr + read_size;
         }
 
         buf_len -= read_size;
-        r->fill_cnt -= read_size;
+        rb->fill_cnt -= read_size;
         total_read_size += read_size;
         if (buf) {
             buf += read_size;
@@ -154,65 +151,75 @@ int rb_read(ringbuf_t *r, uint8_t *buf, int buf_len, uint32_t ticks_to_wait)
             break;
         }
 
-        xSemaphoreGive(r->lock);
-        if (!r->writer_finished && !r->abort && !r->reader_unblock) {
-            if (xSemaphoreTake(r->can_read, ticks_to_wait) != pdTRUE) {
+        xSemaphoreGive(rb->lock);
+        if (!rb->writer_finished && !rb->abort_read && !rb->reader_unblock) {
+            if (xSemaphoreTake(rb->can_read, ticks_to_wait) != pdTRUE) {
                 goto out;
             }
         }
-        if (r->abort == 1) {
-            total_read_size = -1;
+        if (rb->abort_read == 1) {
+            total_read_size = RB_ABORT;
             goto out;
         }
-        if (r->writer_finished == 1) {
+        if (rb->writer_finished == 1) {
             goto out;
         }
-        if (r->reader_unblock == 1) {
-            total_read_size = -3;
+        if (rb->reader_unblock == 1) {
+            total_read_size = RB_READER_UNBLOCK;
             goto out;
         }
 
-        xSemaphoreTake(r->lock, portMAX_DELAY);
+        xSemaphoreTake(rb->lock, portMAX_DELAY);
     }
 
-    xSemaphoreGive(r->lock);
+    xSemaphoreGive(rb->lock);
 out:
     if (total_read_size > 0) {
-        xSemaphoreGive(r->can_write);
+        xSemaphoreGive(rb->can_write);
     }
-    if (r->writer_finished == 1 && total_read_size == 0) {
-        total_read_size = -2;
+    if (rb->writer_finished == 1 && total_read_size == 0) {
+        total_read_size = RB_WRITER_FINISHED;
     }
-    r->reader_unblock = 0; /* We are anyway unblocking reader */
+    rb->reader_unblock = 0; /* We are anyway unblocking reader */
     return total_read_size;
 }
 
-int rb_write(ringbuf_t *r, uint8_t *buf, int buf_len, uint32_t ticks_to_wait)
+int rb_write(ringbuf_t *rb, uint8_t *buf, int buf_len, uint32_t ticks_to_wait)
 {
     int write_size;
     int total_write_size = 0;
 
-    xSemaphoreTake(r->lock, portMAX_DELAY);
+    /**
+     * In case where we are able to write buf_len in one go,
+     * we are not able to check for abort and keep returning buf_len as bytes written.
+     * Check for arguments' validity and abort case before entering memcpy loop.
+     */
+
+    if (rb == NULL || buf == NULL || rb->abort_write == 1) {
+        return RB_FAIL;
+    }
+
+    xSemaphoreTake(rb->lock, portMAX_DELAY);
 
     while (buf_len) {
-        if ((r->size - r->fill_cnt) < buf_len) {
-            write_size = r->size - r->fill_cnt;
+        if ((rb->size - rb->fill_cnt) < buf_len) {
+            write_size = rb->size - rb->fill_cnt;
         } else {
             write_size = buf_len;
         }
-        if ((r->writeptr + write_size) > (r->base + r->size)) {
-            int wlen1 = r->base + r->size - r->writeptr;
+        if ((rb->writeptr + write_size) > (rb->base + rb->size)) {
+            int wlen1 = rb->base + rb->size - rb->writeptr;
             int wlen2 = write_size - wlen1;
-            memcpy(r->writeptr, buf, wlen1);
-            memcpy(r->base, buf + wlen1, wlen2);
-            r->writeptr = r->base + wlen2;
+            memcpy(rb->writeptr, buf, wlen1);
+            memcpy(rb->base, buf + wlen1, wlen2);
+            rb->writeptr = rb->base + wlen2;
         } else {
-            memcpy(r->writeptr, buf, write_size);
-            r->writeptr = r->writeptr + write_size;
+            memcpy(rb->writeptr, buf, write_size);
+            rb->writeptr = rb->writeptr + write_size;
         }
 
         buf_len -= write_size;
-        r->fill_cnt += write_size;
+        rb->fill_cnt += write_size;
         total_write_size += write_size;
         buf += write_size;
 
@@ -220,36 +227,91 @@ int rb_write(ringbuf_t *r, uint8_t *buf, int buf_len, uint32_t ticks_to_wait)
             break;
         }
 
-        xSemaphoreGive(r->lock);
-        if (r->writer_finished) {
-            return write_size > 0 ? write_size : -2;
+        xSemaphoreGive(rb->lock);
+        if (rb->writer_finished) {
+            return write_size > 0 ? write_size : RB_WRITER_FINISHED;
         }
-        if (xSemaphoreTake(r->can_write, ticks_to_wait) != pdTRUE) {
+        if (xSemaphoreTake(rb->can_write, ticks_to_wait) != pdTRUE) {
             goto out;
         }
-        if (r->abort == 1) {
+        if (rb->abort_write == 1) {
             goto out;
         }
-        xSemaphoreTake(r->lock, portMAX_DELAY);
+        xSemaphoreTake(rb->lock, portMAX_DELAY);
     }
 
-    xSemaphoreGive(r->lock);
+    xSemaphoreGive(rb->lock);
 out:
     if (total_write_size != 0 ) {
-        xSemaphoreGive(r->can_read);
+        xSemaphoreGive(rb->can_read);
     }
     return total_write_size;
 }
 
-void rb_abort(ringbuf_t *rb, int val)
+/**
+ * abort and set abort_read and abort_write to asked values.
+ */
+static void _rb_reset(ringbuf_t *rb, int abort_read, int abort_write)
 {
     if (rb == NULL) {
         return;
     }
-    rb->abort = val;
+    xSemaphoreTake(rb->lock, portMAX_DELAY);
+    rb->readptr = rb->writeptr = rb->base;
+    rb->fill_cnt = 0;
+    rb->writer_finished = 0;
+    rb->reader_unblock = 0;
+    rb->abort_read = abort_read;
+    rb->abort_write = abort_write;
+    xSemaphoreGive(rb->lock);
+}
+
+void rb_reset(ringbuf_t *rb)
+{
+    _rb_reset(rb, 0, 0);
+}
+
+void rb_abort_read(ringbuf_t *rb)
+{
+    if (rb == NULL) {
+        return;
+    }
+    rb->abort_read = 1;
+    xSemaphoreGive(rb->can_read);
+    xSemaphoreGive(rb->lock);
+}
+
+void rb_abort_write(ringbuf_t *rb)
+{
+    if (rb == NULL) {
+        return;
+    }
+    rb->abort_write = 1;
+    xSemaphoreGive(rb->can_write);
+    xSemaphoreGive(rb->lock);
+}
+
+void rb_abort(ringbuf_t *rb)
+{
+    if (rb == NULL) {
+        return;
+    }
+    rb->abort_read = 1;
+    rb->abort_write = 1;
     xSemaphoreGive(rb->can_read);
     xSemaphoreGive(rb->can_write);
     xSemaphoreGive(rb->lock);
+}
+
+/**
+ * Reset the ringbuffer and keep keep rb_write aborted.
+ * Note that we are taking lock before even toggling `abort_write` variable.
+ * This serves a special purpose to not allow this abort to be mixed with rb_write.
+ */
+void rb_reset_and_abort_write(ringbuf_t *rb)
+{
+    _rb_reset(rb, 0, 1);
+    xSemaphoreGive(rb->can_write);
 }
 
 void rb_signal_writer_finished(ringbuf_t *rb)
@@ -264,10 +326,11 @@ void rb_signal_writer_finished(ringbuf_t *rb)
 int rb_is_writer_finished(ringbuf_t *rb)
 {
     if (rb == NULL) {
-        return -1;
+        return RB_FAIL;
     }
     return (rb->writer_finished);
 }
+
 void rb_wakeup_reader(ringbuf_t *rb)
 {
     if (rb == NULL) {
@@ -276,6 +339,7 @@ void rb_wakeup_reader(ringbuf_t *rb)
     rb->reader_unblock = 1;
     xSemaphoreGive(rb->can_read);
 }
+
 void rb_stat(ringbuf_t *rb)
 {
     xSemaphoreTake(rb->lock, portMAX_DELAY);

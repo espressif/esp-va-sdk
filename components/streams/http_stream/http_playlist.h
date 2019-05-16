@@ -44,7 +44,7 @@ typedef struct http_playlist {
     STAILQ_HEAD(stailqhead, playlist_entry_s) head;
 } http_playlist_t;
 
-esp_err_t playlist_add_entry(http_playlist_t *playlist, char *line);
+esp_err_t playlist_add_entry(http_playlist_t *playlist, char *line, const char *host_url);
 esp_err_t playlist_free(http_playlist_t *playlist);
 char *playlist_get_next_entry(http_playlist_t *playlist);
 

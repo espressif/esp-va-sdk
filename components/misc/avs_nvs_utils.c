@@ -19,7 +19,6 @@
  * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
  * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
  */
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -31,7 +30,7 @@
 
 #define NVS_TASK_STACK_SIZE 2048
 
-static const char *TAG = "avs-nvs-util";
+static const char *TAG = "[avs_nvs_utils]";
 
 /* TODO: As of now, this utility will create a task for every NVS get/set operation. This is required,
  * only if a task having stack in SPIRAM needs NVS functionality. In future, we can add a check
@@ -42,7 +41,7 @@ static const char *TAG = "avs-nvs-util";
 struct nvs_ops_params {
     const char *ns;
     const char *key;
-    uint8_t *val_buf;
+    void *val_buf;
     size_t *buf_size;
     enum {
         GET,
@@ -51,8 +50,10 @@ struct nvs_ops_params {
     } op;
     enum {
         I8,
+        U16,
         STR,
         BLOB,
+        KEY,
         INVALID,
     } type;
     TaskHandle_t calling_task_handle;
@@ -63,20 +64,17 @@ static void nvs_task(void *arg)
     struct nvs_ops_params *params = (struct nvs_ops_params *)arg;
     nvs_handle handle;
     uint32_t ret = ESP_OK;
+    esp_err_t err = ESP_OK;
 
-    nvs_open_mode mode = params->op == SET ? NVS_READWRITE : NVS_READONLY;
+    nvs_open_mode mode = params->op == GET ? NVS_READONLY : NVS_READWRITE;
 
-    if (params->op == ERASE) {
-        esp_err_t ret = nvs_flash_erase();
-        if (ret == ESP_OK) {
+    if (params->type != INVALID) {
+        err = nvs_open(params->ns, mode, &handle);
+        if (err != ESP_OK) {
+            ESP_LOGI(TAG, "Cannot find namespace %s in NVS", params->ns);
+            ret = ESP_FAIL;
             goto done;
         }
-    }
-    esp_err_t err = nvs_open(params->ns, mode, &handle);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Error opening %s namespace!", params->ns);
-        ret = ESP_FAIL;
-        goto done;
     }
 
     if (params->op == SET) {
@@ -85,7 +83,9 @@ static void nvs_task(void *arg)
         } else if (params->type == STR) {
             err = nvs_set_str(handle, params->key, (char *)params->val_buf);
         } else if (params->type == I8) {
-            err = nvs_set_i8(handle, params->key, *(params->val_buf));
+            err = nvs_set_i8(handle, params->key, (int8_t)params->val_buf);
+        } else if (params->type == U16) {
+            err = nvs_set_u16(handle, params->key, (uint16_t)params->val_buf);
         }
         if (err != ESP_OK) {
             ESP_LOGE(TAG, "Error setting value: %s", params->key);
@@ -98,13 +98,27 @@ static void nvs_task(void *arg)
             err = nvs_get_str(handle, params->key, (char *)params->val_buf, params->buf_size);
         } else if (params->type == I8) {
             err = nvs_get_i8(handle, params->key, (int8_t *)params->val_buf);
+        } else if (params->type == U16) {
+            err = nvs_get_u16(handle, params->key, (uint16_t *)params->val_buf);
         }
         if (err != ESP_OK) {
             ESP_LOGI(TAG, "No value set for: %s", params->key);
             ret = ESP_FAIL;
         }
+    } else if (params->op == ERASE) {
+        if (params->type == KEY) {
+            err = nvs_erase_key(handle, params->key);
+        } else if (params->type == INVALID) {
+            err = nvs_flash_erase();
+        }
+        if (err != ESP_OK) {
+            ESP_LOGI(TAG, "Error erasing nvs type: %d, %s, %d", params->type, params->key, err);
+            ret = ESP_FAIL;
+        }
     }
-    nvs_close(handle);
+    if (params->type != INVALID) {
+        nvs_close(handle);
+    }
 
 done:
     /* Notify calling task */
@@ -146,7 +160,7 @@ esp_err_t avs_nvs_get_blob(const char *ns, const char *key, uint8_t *val_buf, si
 
 esp_err_t avs_nvs_set_str(const char *ns, const char *key, char *val_buf)
 {
-    struct nvs_ops_params tp = {ns, key, (uint8_t *)val_buf, NULL, SET, STR, xTaskGetCurrentTaskHandle()};
+    struct nvs_ops_params tp = {ns, key, val_buf, NULL, SET, STR, xTaskGetCurrentTaskHandle()};
     /* This will create a thread, do NVS operation and complete the thread */
     TaskHandle_t nvs_task_handle;
     xTaskCreate(nvs_task, "nvs_task", NVS_TASK_STACK_SIZE, &tp, CONFIG_ESP32_PTHREAD_TASK_PRIO_DEFAULT, &nvs_task_handle);
@@ -162,7 +176,7 @@ esp_err_t avs_nvs_set_str(const char *ns, const char *key, char *val_buf)
 
 esp_err_t avs_nvs_get_str(const char *ns, const char *key, char *val_buf, size_t *buf_size)
 {
-    struct nvs_ops_params tp = {ns, key, (uint8_t *)val_buf, buf_size, GET, STR, xTaskGetCurrentTaskHandle()};
+    struct nvs_ops_params tp = {ns, key, val_buf, buf_size, GET, STR, xTaskGetCurrentTaskHandle()};
     /* This will create a thread, do NVS operation and complete the thread */
     TaskHandle_t nvs_task_handle;
     xTaskCreate(nvs_task, "nvs_task", NVS_TASK_STACK_SIZE, &tp, CONFIG_ESP32_PTHREAD_TASK_PRIO_DEFAULT, &nvs_task_handle);
@@ -176,9 +190,9 @@ esp_err_t avs_nvs_get_str(const char *ns, const char *key, char *val_buf, size_t
     }
 }
 
-esp_err_t avs_nvs_set_i8(const char *ns, const char *key, uint8_t val_buf)
+esp_err_t avs_nvs_set_i8(const char *ns, const char *key, int8_t val_buf)
 {
-    struct nvs_ops_params tp = {ns, key, &val_buf, NULL, SET, I8, xTaskGetCurrentTaskHandle()};
+    struct nvs_ops_params tp = {ns, key, val_buf, NULL, SET, I8, xTaskGetCurrentTaskHandle()};
     /* This will create a thread, do NVS operation and complete the thread */
     TaskHandle_t nvs_task_handle;
     xTaskCreate(nvs_task, "nvs_task", NVS_TASK_STACK_SIZE, &tp, CONFIG_ESP32_PTHREAD_TASK_PRIO_DEFAULT, &nvs_task_handle);
@@ -192,9 +206,41 @@ esp_err_t avs_nvs_set_i8(const char *ns, const char *key, uint8_t val_buf)
     }
 }
 
-esp_err_t avs_nvs_get_i8(const char *ns, const char *key, uint8_t *val_buf)
+esp_err_t avs_nvs_get_i8(const char *ns, const char *key, int8_t *val_buf)
 {
-    struct nvs_ops_params tp = {ns, key, (uint8_t *)val_buf, NULL, GET, I8, xTaskGetCurrentTaskHandle()};
+    struct nvs_ops_params tp = {ns, key, val_buf, NULL, GET, I8, xTaskGetCurrentTaskHandle()};
+    /* This will create a thread, do NVS operation and complete the thread */
+    TaskHandle_t nvs_task_handle;
+    xTaskCreate(nvs_task, "nvs_task", NVS_TASK_STACK_SIZE, &tp, CONFIG_ESP32_PTHREAD_TASK_PRIO_DEFAULT, &nvs_task_handle);
+    uint32_t result;
+    /* Wait for operation to complete */
+    xTaskNotifyWait(0, 0, &result, portMAX_DELAY);
+    if ((int)result != ESP_OK) {
+        return ESP_FAIL;
+    } else {
+        return ESP_OK;
+    }
+}
+
+esp_err_t avs_nvs_set_u16(const char *ns, const char *key, uint16_t val_buf)
+{
+    struct nvs_ops_params tp = {ns, key, val_buf, NULL, SET, U16, xTaskGetCurrentTaskHandle()};
+    /* This will create a thread, do NVS operation and complete the thread */
+    TaskHandle_t nvs_task_handle;
+    xTaskCreate(nvs_task, "nvs_task", NVS_TASK_STACK_SIZE, &tp, CONFIG_ESP32_PTHREAD_TASK_PRIO_DEFAULT, &nvs_task_handle);
+    uint32_t result;
+    /* Wait for operation to complete */
+    xTaskNotifyWait(0, 0, &result, portMAX_DELAY);
+    if ((int)result != ESP_OK) {
+        return ESP_FAIL;
+    } else {
+        return ESP_OK;
+    }
+}
+
+esp_err_t avs_nvs_get_u16(const char *ns, const char *key, uint16_t *val_buf)
+{
+    struct nvs_ops_params tp = {ns, key, val_buf, NULL, GET, U16, xTaskGetCurrentTaskHandle()};
     /* This will create a thread, do NVS operation and complete the thread */
     TaskHandle_t nvs_task_handle;
     xTaskCreate(nvs_task, "nvs_task", NVS_TASK_STACK_SIZE, &tp, CONFIG_ESP32_PTHREAD_TASK_PRIO_DEFAULT, &nvs_task_handle);
@@ -211,6 +257,22 @@ esp_err_t avs_nvs_get_i8(const char *ns, const char *key, uint8_t *val_buf)
 esp_err_t avs_nvs_flash_erase()
 {
     struct nvs_ops_params tp = {NULL, NULL, NULL, 0, ERASE, INVALID, xTaskGetCurrentTaskHandle()};
+    /* This will create a thread, do NVS operation and complete the thread */
+    TaskHandle_t nvs_task_handle;
+    xTaskCreate(nvs_task, "nvs_task", NVS_TASK_STACK_SIZE, &tp, CONFIG_ESP32_PTHREAD_TASK_PRIO_DEFAULT, &nvs_task_handle);
+    uint32_t result;
+    /* Wait for operation to complete */
+    xTaskNotifyWait(0, 0, &result, portMAX_DELAY);
+    if ((int)result != ESP_OK) {
+        return ESP_FAIL;
+    } else {
+        return ESP_OK;
+    }
+}
+
+esp_err_t avs_nvs_erase_key(const char *ns, const char *key)
+{
+    struct nvs_ops_params tp = {ns, key, NULL, NULL, ERASE, KEY, xTaskGetCurrentTaskHandle()};
     /* This will create a thread, do NVS operation and complete the thread */
     TaskHandle_t nvs_task_handle;
     xTaskCreate(nvs_task, "nvs_task", NVS_TASK_STACK_SIZE, &tp, CONFIG_ESP32_PTHREAD_TASK_PRIO_DEFAULT, &nvs_task_handle);
