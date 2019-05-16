@@ -11,8 +11,8 @@ I (xxx) conn_mgr_prov: Provisioning started with :
 	proof of possession (pop): abcd1234
 ```
 You can use either the Android or iOS apps (links below) to provision your device to the desired Wi-Fi Access Point and associate the user's Amazon account with the device.
-* [Android](https://github.com/espressif/esp-avs-sdk/releases)
-* [iOS](https://github.com/espressif/esp-idf-provisioning-ios/tree/versions/avs)
+* [Android](https://play.google.com/store/apps/details?id=com.espressif.provbleavs)
+* iOS support is coming soon...
 
 # Demo
 * Once the board boots up and successfully connects to the Wi-Fi network after provisioning, you will see a print "Alexa is ready", after which you can use either use "Rec" button on the board or say "Alexa" to start a conversation. For Tap-to-Talk, press and release the button and speak. The green LED glows when the microphone is active.
