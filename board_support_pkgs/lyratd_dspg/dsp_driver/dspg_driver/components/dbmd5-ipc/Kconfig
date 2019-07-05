@@ -1,0 +1,8 @@
+menu "DSPG Configuration"
+
+config ENABLE_DSPG_REC
+    bool "Enable Debug audio record over UART"
+
+config ENABLE_DSPG_DEBUG
+    bool "Enable Debug logs over UART"
+endmenu

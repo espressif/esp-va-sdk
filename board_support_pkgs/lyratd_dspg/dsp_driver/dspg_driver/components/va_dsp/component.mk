@@ -1,0 +1,3 @@
+COMPONENT_ADD_LDFLAGS += $(COMPONENT_PATH)/lib/libva_dsp.a
+COMPONENT_ADD_LINKER_DEPS += $(COMPONENT_PATH)/lib/libva_dsp.a
+
