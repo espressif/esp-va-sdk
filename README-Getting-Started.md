@@ -1,5 +1,5 @@
 # Prerequisites
-Please prepare your host system with the toolchain. Please see httphttps://docs.espressif.com/projects/esp-idf/en/v3.2/ for the host setup.
+Please prepare your host system with the toolchain. Please see https://docs.espressif.com/projects/esp-idf/en/v3.2/ for the host setup.
 
 
 # Prepare Images
