@@ -21,6 +21,7 @@
 #include <audio_board.h>
 #include <led_lyrat.h>
 #include <va_board.h>
+#include <media_hal_playback.h>
 
 #define VA_TAG "AUDIO_BOARD"
 
@@ -39,6 +40,15 @@ int va_board_init()
     int ret;
     i2s_config_t i2s_cfg = {};
     audio_board_i2s_init_default(&i2s_cfg);
+
+    media_hal_playback_cfg_t cfg = {
+        .channels = 2,
+        .sample_rate = 48000,
+        .i2s_port_num = I2S_NUM_0,
+        .bits_per_sample = 16,
+    };
+    media_hal_init_playback(&cfg);
+
     ret = i2s_driver_install(I2S_PORT_NUM, &i2s_cfg, 0, NULL);
     if (ret != ESP_OK) {
         ESP_LOGE(VA_TAG, "Error installing i2s driver for stream");

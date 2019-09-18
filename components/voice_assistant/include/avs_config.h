@@ -14,5 +14,6 @@
  *
  */
 int alexa_conn_mgr_prov_cb(void *user_data, conn_mgr_cb_event_t event);
+int avs_config_data_handler(uint32_t session_id, const uint8_t *inbuf, ssize_t inlen, uint8_t **outbuf, ssize_t *outlen, void *priv_data);
 
 #endif /* _AVS_CONFIG_H_ */

@@ -73,14 +73,6 @@ typedef enum {
     ALEXA_ALERT_DISABLE,
 } alexa_alert_state_t;
 
-/*
- * Voice Assistant resample i2s parameters
- */
-typedef struct {
-    int va_resample_freq;
-    int va_resample_ch;
-} va_resample_param_t;
-
 /** Dialog State callback
  *
  * This callback is executed when the dialog state changes. Please
@@ -114,6 +106,13 @@ int va_app_speech_stop();
  */
 int va_app_speech_start();
 
+/** Notify playback to DSP
+ *
+ * This should be called when voice assistant is about to write some data to playback
+ * interface
+ */
+int va_app_playback_starting();
+
 /** Set Volume callback
  *
  * This callback is executed when the voice assistant has changed the output
@@ -134,11 +133,5 @@ int va_app_mute_is_set(va_mute_state_t va_mute_state);
 * alert or a notification that has started or if it has ended.
 */
 int alexa_app_raise_alert(alexa_alert_types_t alexa_alert_type, alexa_alert_state_t alexa_alert_state);
-
-/*
- *This is a callback function to resample the playback signal which is coming from sys_playback
- *The resampled signal is then passed to the codec/dsp/amplifier
- */
-int va_app_playback_data(va_resample_param_t *va_resample_param, void *buf, ssize_t len);
 
 #endif /* _VOICE_ASSISTANT_APP_CB_H_ */

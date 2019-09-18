@@ -18,6 +18,7 @@
 #include <wifi_cli.h>
 #include <media_hal.h>
 #include <tone.h>
+#include <auth_delegate.h>
 #include <va_dsp.h>
 #include <va_board.h>
 
@@ -95,13 +96,13 @@ void app_main()
 {
     ESP_LOGI(TAG, "==== Voice Assistant SDK version: %s ====", va_get_sdk_version());
 
+    /* This will never be freed */
     gva_config_t *va_cfg = va_mem_alloc(sizeof(gva_config_t), VA_MEM_EXTERNAL);
 
     if (!va_cfg) {
         ESP_LOGE(TAG, "Failed to alloc voice assistant config");
         abort();
     }
-    va_cfg->auth_delegate.type = auth_type_subsequent;
 
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES) {
@@ -110,6 +111,7 @@ void app_main()
     }
     ESP_ERROR_CHECK( ret );
 
+    va_board_init();
     static media_hal_config_t media_hal_conf = MEDIA_HAL_DEFAULT();
     media_hal_init(&media_hal_conf);
 
@@ -124,23 +126,28 @@ void app_main()
     tcpip_adapter_init();
     ESP_ERROR_CHECK(esp_event_loop_init(event_handler, NULL) );
 
+    auth_delegate_init(NULL, NULL);
     if (wifi_get_provisioning_state() != ESP_OK) {
         ESP_LOGE(TAG, "Error getting device provisioning state");
         abort();
     }
     if (!provisioning_state) {
+        va_led_set(LED_RESET);
         ESP_LOGI(TAG, "***************************");
         ESP_LOGI(TAG, "** Starting provisioning **");
         ESP_LOGI(TAG, "***************************");
         ESP_LOGI(TAG, "Refer the README-GVA.md and enter the CLI commands. Make sure to enter the nvs-set commands first and then the wifi-set command.");
     } else {
+        va_led_set(VA_CAN_START);
         ESP_LOGI(TAG, "Already provisioned, starting station");
         wifi_init_sta();
     }
 
     xEventGroupWaitBits(cm_event_group, CONNECTED_BIT, false, true, portMAX_DELAY);
-    va_led_set(VA_CAN_START);
-    va_board_init();
+
+    if (!provisioning_state) {
+        va_led_set(VA_CAN_START);
+    }
 
     va_cfg->device_config.device_model = "device-model-default";    // Enter your model id (name) here
     va_cfg->device_config.device_id = "device-id-default";          // Enter your (unique) device id here
@@ -151,6 +158,5 @@ void app_main()
     }
     /* This is a blocking call */
     va_dsp_init();
-    va_mem_free(va_cfg);
     return;
 }

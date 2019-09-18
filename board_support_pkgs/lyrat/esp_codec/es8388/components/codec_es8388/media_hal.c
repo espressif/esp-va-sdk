@@ -98,6 +98,9 @@ media_hal_t* media_hal_get_handle()
 
 esp_err_t media_hal_deinit(media_hal_t* media_hal)
 {
+    if (!media_hal) {
+        return ESP_FAIL;
+    }
     esp_err_t ret;
     mutex_destroy(media_hal->media_hal_lock);
     ret = media_hal->audio_codec_deinitialize(media_hal_port_num);
@@ -108,6 +111,9 @@ esp_err_t media_hal_deinit(media_hal_t* media_hal)
 
 esp_err_t media_hal_set_state(media_hal_t* media_hal, media_hal_codec_mode_t mode, media_hal_sel_state_t media_hal_state)
 {
+    if (!media_hal) {
+        return ESP_FAIL;
+    }
     esp_err_t ret;
     mutex_lock(media_hal->media_hal_lock);
     ESP_LOGI(HAL_TAG, "Codec mode is %d", mode);
@@ -118,6 +124,9 @@ esp_err_t media_hal_set_state(media_hal_t* media_hal, media_hal_codec_mode_t mod
 
 esp_err_t media_hal_control_volume(media_hal_t* media_hal, uint8_t volume)
 {
+    if (!media_hal) {
+        return ESP_FAIL;
+    }
     esp_err_t ret;
     mutex_lock(media_hal->media_hal_lock);
     if (volume == 0) {
@@ -132,6 +141,9 @@ esp_err_t media_hal_control_volume(media_hal_t* media_hal, uint8_t volume)
 
 esp_err_t media_hal_set_mute(media_hal_t* media_hal, bool mute)
 {
+    if (!media_hal) {
+        return ESP_FAIL;
+    }
     esp_err_t ret;
     mutex_lock(media_hal->media_hal_lock);
     ret = media_hal->audio_codec_set_mute(mute);
@@ -141,6 +153,9 @@ esp_err_t media_hal_set_mute(media_hal_t* media_hal, bool mute)
 
 esp_err_t media_hal_get_volume(media_hal_t* media_hal, uint8_t *volume)
 {
+    if (!media_hal) {
+        return ESP_FAIL;
+    }
     esp_err_t ret;
     MEDIA_HAL_CHECK_NULL(volume, "Get volume para is null", -1);
     mutex_lock(media_hal->media_hal_lock);
@@ -152,6 +167,9 @@ esp_err_t media_hal_get_volume(media_hal_t* media_hal, uint8_t *volume)
 
 esp_err_t media_hal_config_format(media_hal_t* media_hal, media_hal_codec_mode_t mode, media_hal_format_t fmt)
 {
+    if (!media_hal) {
+        return ESP_FAIL;
+    }
     esp_err_t ret;
     mutex_lock(media_hal->media_hal_lock);
     ret = media_hal->audio_codec_config_format(mode, fmt);
@@ -161,6 +179,9 @@ esp_err_t media_hal_config_format(media_hal_t* media_hal, media_hal_codec_mode_t
 
 esp_err_t media_hal_set_clk(media_hal_t* media_hal, media_hal_codec_mode_t mode, uint32_t rate, media_hal_bit_length_t bits_per_sample)
 {
+    if (!media_hal) {
+        return ESP_FAIL;
+    }
     esp_err_t ret;
     mutex_lock(media_hal->media_hal_lock);
     ret = media_hal->audio_codec_set_i2s_clk(mode, bits_per_sample);
@@ -170,6 +191,9 @@ esp_err_t media_hal_set_clk(media_hal_t* media_hal, media_hal_codec_mode_t mode,
 
 esp_err_t media_hal_powerup(media_hal_t* media_hal)
 {
+    if (!media_hal) {
+        return ESP_FAIL;
+    }
     esp_err_t ret;
     mutex_lock(media_hal->media_hal_lock);
     ret = media_hal->audio_codec_powerup();
@@ -179,6 +203,9 @@ esp_err_t media_hal_powerup(media_hal_t* media_hal)
 
 esp_err_t media_hal_powerdown(media_hal_t* media_hal)
 {
+    if (!media_hal) {
+        return ESP_FAIL;
+    }
     esp_err_t ret;
     mutex_lock(media_hal->media_hal_lock);
     ret = media_hal->audio_codec_powerdown();

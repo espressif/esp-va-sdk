@@ -14,17 +14,32 @@
 
 #include <voice_assistant.h>
 #include <alexa.h>
+#include <alexa_local_config.h>
 
 #include <va_mem_utils.h>
 #include <scli.h>
 #include <va_diag_cli.h>
 #include <wifi_cli.h>
-#include "app_auth.h"
 #include <media_hal.h>
 #include <tone.h>
 #include <avs_config.h>
+#include <auth_delegate.h>
 #include "va_dsp.h"
 #include "va_board.h"
+#include "app_auth.h"
+#include "app_wifi.h"
+
+#ifdef CONFIG_ALEXA_ENABLE_EQUALIZER
+#include "alexa_equalizer.h"
+#endif
+
+#ifdef CONFIG_PM_ENABLE
+#include "esp_pm.h"
+#endif
+
+#ifdef CONFIG_ALEXA_ENABLE_OTA
+#include "app_ota.h"
+#endif
 
 #define SOFTAP_SSID_PREFIX  "ESP-Alexa-"
 
@@ -41,13 +56,23 @@ static esp_err_t event_handler(void *ctx, system_event_t *event)
     switch(event->event_id) {
     case SYSTEM_EVENT_STA_START:
         esp_wifi_connect();
+        esp_wifi_set_storage(WIFI_STORAGE_FLASH);
+        break;
+    case SYSTEM_EVENT_STA_CONNECTED:
+        // We already have print in SYSTEM_EVENT_STA_GOT_IP
         break;
     case SYSTEM_EVENT_STA_GOT_IP:
+        app_wifi_stop_timeout_timer();
         printf("%s: Connected with IP Address: %s\n", TAG, ip4addr_ntoa(&event->event_info.got_ip.ip_info.ip));
         xEventGroupSetBits(cm_event_group, CONNECTED_BIT);
         break;
     case SYSTEM_EVENT_STA_DISCONNECTED:
-        printf("%s: Disconnected. Connecting to the AP again\n", TAG);
+    case SYSTEM_EVENT_STA_AUTHMODE_CHANGE:
+    case SYSTEM_EVENT_STA_LOST_IP:
+    case SYSTEM_EVENT_STA_WPS_ER_FAILED:
+    case SYSTEM_EVENT_STA_WPS_ER_TIMEOUT:
+        app_wifi_stop_timeout_timer();
+        printf("%s: Disconnected. Event: %d. Connecting to the AP again\n", TAG, event->event_id);
         esp_wifi_connect();
         break;
     default:
@@ -62,7 +87,11 @@ static void wifi_init_sta()
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA) );
     ESP_ERROR_CHECK(esp_wifi_start() );
+#ifdef CONFIG_PM_ENABLE
+    ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_MIN_MODEM));
+#else
     ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
+#endif
 }
 
 #define MEDIA_HAL_DEFAULT()     \
@@ -85,13 +114,13 @@ void app_main()
 {
     ESP_LOGI(TAG, "==== Voice Assistant SDK version: %s ====", va_get_sdk_version());
 
+    /* This will never be freed */
     alexa_config_t *va_cfg = va_mem_alloc(sizeof(alexa_config_t), VA_MEM_EXTERNAL);
 
     if (!va_cfg) {
         ESP_LOGE(TAG, "Failed to alloc voice assistant config");
         abort();
     }
-    va_cfg->auth_delegate.type = auth_type_subsequent;
 
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES) {
@@ -100,6 +129,7 @@ void app_main()
     }
     ESP_ERROR_CHECK( ret );
 
+    va_board_init();
     static media_hal_config_t media_hal_conf = MEDIA_HAL_DEFAULT();
     media_hal_init(&media_hal_conf);
 
@@ -109,6 +139,7 @@ void app_main()
     scli_init();
     va_diag_register_cli();
     wifi_register_cli();
+    app_wifi_reset_to_prov_init();
     app_auth_register_cli();
     cm_event_group = xEventGroupCreate();
 
@@ -116,18 +147,27 @@ void app_main()
     ESP_ERROR_CHECK(esp_event_loop_init(event_handler, NULL) );
 
     printf("\r");       // To remove a garbage print ">>"
+    auth_delegate_init(alexa_signin_handler, alexa_signout_handler);    // This is specific to the sdk. Do not modify.
     bool provisioned = false;
     if (conn_mgr_prov_is_provisioned(&provisioned) != ESP_OK) {
         ESP_LOGE(TAG, "Error getting device provisioning state");
         abort();
     }
-    if (!provisioned) {
-        printf("%s: Starting provisioning\n", TAG);
-        char service_name[20];
-        uint8_t mac[6];
-        esp_wifi_get_mac(WIFI_IF_STA, mac);
-        snprintf(service_name, sizeof(service_name), "%s%02X%02X", SOFTAP_SSID_PREFIX, mac[4], mac[5]);
+    if (app_wifi_get_reset_to_prov() > 0) {
+        app_wifi_start_timeout_timer();
+        provisioned = false;
+        app_wifi_unset_reset_to_prov();
+        esp_wifi_set_storage(WIFI_STORAGE_RAM);
+    }
 
+    char service_name[20];
+    uint8_t mac[6];
+    esp_wifi_get_mac(WIFI_IF_STA, mac);
+    snprintf(service_name, sizeof(service_name), "%s%02X%02X", SOFTAP_SSID_PREFIX, mac[4], mac[5]);
+
+    if (!provisioned) {
+        va_led_set(LED_RESET);
+        printf("%s: Starting provisioning\n", TAG);
         conn_mgr_prov_t prov_type = conn_mgr_prov_mode_ble;
         prov_type.event_cb = alexa_conn_mgr_prov_cb;
         prov_type.cb_user_data = (void *)va_cfg;
@@ -137,6 +177,7 @@ void app_main()
         conn_mgr_prov_start_provisioning(prov_type, security, pop, service_name, service_key);
         printf("\tproof of possession (pop): %s\n", pop);
     } else {
+        va_led_set(VA_CAN_START);
         ESP_LOGI(TAG, "Already provisioned, starting station");
         conn_mgr_prov_mem_release();        // This is useful in case of BLE provisioning
         app_prov_done_cb();
@@ -144,8 +185,19 @@ void app_main()
     }
 
     xEventGroupWaitBits(cm_event_group, CONNECTED_BIT | PROV_DONE_BIT, false, true, portMAX_DELAY);
-    va_led_set(VA_CAN_START);
-    va_board_init();
+
+    if (!provisioned) {
+        va_led_set(VA_CAN_START);
+    }
+
+#ifdef CONFIG_ALEXA_ENABLE_EQUALIZER
+    alexa_equalizer_init();
+#endif
+
+    ret = alexa_local_config_start(va_cfg, service_name);
+    if (ret != ESP_OK) {
+	ESP_LOGE(TAG, "Failed to start local SSDP instance. Some features might not work.");
+    }
     ret = alexa_init(va_cfg);
 #ifdef ALEXA_BT
     alexa_bluetooth_init();
@@ -154,11 +206,32 @@ void app_main()
     if (ret != ESP_OK) {
         while(1) vTaskDelay(2);
     }
+
     /* This is a blocking call */
     va_dsp_init();
+
+#ifdef CONFIG_ALEXA_ENABLE_OTA
+    /* Doing OTA init after full alexa boot-up. */
+    app_ota_init();
+#endif
+
     /* This is only supported with minimum flash size of 8MB. */
     alexa_tone_enable_larger_tones();
-    va_mem_free(va_cfg);
-    return;
 
+#ifdef CONFIG_PM_ENABLE
+    rtc_cpu_freq_t max_freq;
+    rtc_clk_cpu_freq_from_mhz(CONFIG_ESP32_DEFAULT_CPU_FREQ_MHZ, &max_freq);
+    esp_pm_config_esp32_t pm_config = {
+            .max_cpu_freq = max_freq,
+            .min_cpu_freq = RTC_CPU_FREQ_XTAL,
+#if CONFIG_FREERTOS_USE_TICKLESS_IDLE
+            .light_sleep_enable = true
+#endif
+    };
+    ESP_ERROR_CHECK( esp_pm_configure(&pm_config));
+    gpio_wakeup_enable(GPIO_NUM_36, GPIO_INTR_LOW_LEVEL);
+    esp_sleep_enable_gpio_wakeup();
+    esp_pm_dump_locks(stdout);
+#endif
+    return;
 }

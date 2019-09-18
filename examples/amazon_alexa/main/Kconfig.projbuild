@@ -1,11 +1,23 @@
 menu "Voice Assistant Configurations"
 
+config ALEXA_REMOVE_SHORT_ALERT_SUPPORT
+    bool "Remove the support for short alerts"
+    default n
+    help
+        Short alert tone plays if an alert has triggered and alerts is in the background. Enabling this removes the support for that.
+
 config VOICE_ASSISTANT_TASK_LIST
     bool "Enable task list print at delete stream"
     default n
     depends on FREERTOS_USE_STATS_FORMATTING_FUNCTIONS
     help
         Prints all the tasks which are running as well as blocked.
+
+config ALEXA_ENABLE_OTA
+    bool "Enable OTA support"
+    default n
+    help
+        Enables OTA support with cloud agent.
 
 config ALEXA_ENABLE_LOCAL_PLAYER
     bool "Enable Local Player"
@@ -18,5 +30,12 @@ config ALEXA_ENABLE_EQUALIZER
     default n
     help
         Enables the equalizer. The application can then modify the output according to the values of the equalizer.
+
+config ALEXA_ENABLE_AWS_IOT
+    bool "Enable AWS-Iot"
+    default n
+    depends on AWS_IOT_SDK
+    help
+        Enables the AWS-IoT additional component. The wake-word count can be seen on the AWS-IoT console
 
 endmenu

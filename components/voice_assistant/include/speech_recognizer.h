@@ -13,7 +13,9 @@ enum initiator {
     /** This is not yet supported */
     HOLD_AND_TALK,
     /** Communication was initatied by voice assistant due to ExpectSpeech. The application will never send this value */
-    EXPECT_SPEECH
+    EXPECT_SPEECH,
+    /** Communication was initiated with text input. Used in Google Dialogflow */
+    TEXT,
 };
 
 /** Stream data to the voice assistant

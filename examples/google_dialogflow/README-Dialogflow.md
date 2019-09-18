@@ -38,9 +38,9 @@ google-oauthlib-tool --scope https://www.googleapis.com/auth/cloud-platform \
 * Make sure to enter the nvs-set commands first and then the wifi-set command.
 ```
 [Enter]
->> nvs-set avs refreshToken string <refresh_token_from_credentials.json>
->> nvs-set avs clientId string <client_id_from_credentials.json>
->> nvs-set avs clientSecret string <client_secret_from_credentials.json>
+>> nvs-set refreshToken string <refresh_token_from_credentials.json>
+>> nvs-set clientId string <client_id_from_credentials.json>
+>> nvs-set clientSecret string <client_secret_from_credentials.json>
 ```
 * Use below CLI command to configure device's station interface
 ```

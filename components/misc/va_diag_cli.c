@@ -27,7 +27,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <va_mem_utils.h>
-#include <avs_nvs_utils.h>
+#include <va_nvs_utils.h>
 #include <string.h>
 #include <nvs.h>
 #include <scli.h>
@@ -49,19 +49,18 @@ static void hex_dump(uint8_t *data, int length)
 
 static int nvs_get_cli_handler(int argc, char *argv[])
 {
-    const char *namespace = argv[1];
-    const char *variable = argv[2];
-    const char *type = argv[3];
+    const char *variable = argv[1];
+    const char *type = argv[2];
     size_t val_length = 0;
 
     /* Just to go to the next line */
     printf("\n");
-    if (argc != 4) {
+    if (argc != 3) {
         ESP_LOGE(TAG, "Incorrect arguments");
         return 0;
     }
     if (strcmp(type, "string") == 0) {
-        avs_nvs_get_str(namespace, variable, NULL, &val_length);
+        va_nvs_get_str(variable, NULL, &val_length);
         if (val_length == 0) {
             printf("%s: Variable with 0 length\n", TAG);
             return 0;
@@ -71,12 +70,12 @@ static int nvs_get_cli_handler(int argc, char *argv[])
                 printf("%s: Memory allocation failed", TAG);
                 return 0;
             }
-            avs_nvs_get_str(namespace, variable, value, &val_length);
+            va_nvs_get_str(variable, value, &val_length);
             printf("\n%s\n", value);
             va_mem_free(value);
         }
     } else if (strcmp(type, "blob") == 0) {
-        avs_nvs_get_blob(namespace, variable, NULL, &val_length);
+        va_nvs_get_blob(variable, NULL, &val_length);
         if (val_length == 0) {
             printf("%s: Variable with 0 length\n", TAG);
             return 0;
@@ -86,18 +85,18 @@ static int nvs_get_cli_handler(int argc, char *argv[])
                 printf("%s: Memory allocation failed", TAG);
                 return 0;
             }
-            avs_nvs_get_blob(namespace, variable, value, &val_length);
+            va_nvs_get_blob(variable, value, &val_length);
             hex_dump(value, val_length);
             va_mem_free(value);
         }
     } else if (strcmp(type, "i8") == 0) {
         int8_t value;
-        avs_nvs_get_i8(namespace, variable, &value);
+        va_nvs_get_i8(variable, &value);
         printf("\n%d\n", value);
         return 0;
     } else if (strcmp(type, "u16") == 0) {
         uint16_t value;
-        avs_nvs_get_u16(namespace, variable, &value);
+        va_nvs_get_u16(variable, &value);
         printf("\n%u\n", value);
         return 0;
     } else {
@@ -108,19 +107,18 @@ static int nvs_get_cli_handler(int argc, char *argv[])
 
 static int nvs_set_cli_handler(int argc, char *argv[])
 {
-    const char *namespace = argv[1];
-    const char *variable = argv[2];
-    const char *type = argv[3];
-    char *value = argv[4];
+    const char *variable = argv[1];
+    const char *type = argv[2];
+    char *value = argv[3];
 
     /* Just to go to the next line */
     printf("\n");
-    if (argc != 5) {
+    if (argc != 4) {
         ESP_LOGE(TAG, "Incorrect arguments");
         return 0;
     }
     if (strcmp(type, "string") == 0) {
-        avs_nvs_set_str(namespace, variable, value);
+        va_nvs_set_str(variable, value);
     } else if (strcmp(type, "i8") == 0) {
         uint8_t val;
         val = atoi((const char *)value);
@@ -128,7 +126,7 @@ static int nvs_set_cli_handler(int argc, char *argv[])
             ESP_LOGE(TAG, "Invalid value");
             return -1;
         }
-        avs_nvs_set_i8(namespace, variable, val);
+        va_nvs_set_i8(variable, val);
     } else if (strcmp(type, "u16") == 0) {
         uint16_t val;
         val = (uint16_t)atoi((const char *)value);
@@ -136,7 +134,7 @@ static int nvs_set_cli_handler(int argc, char *argv[])
             ESP_LOGE(TAG, "Invalid value");
             return -1;
         }
-        avs_nvs_set_u16(namespace, variable, val);
+        va_nvs_set_u16(variable, val);
     } else if (strcmp(type, "blob") == 0) {
         ESP_LOGE(TAG, "Not yet supported");
     } else {
@@ -149,7 +147,7 @@ static int nvs_erase_cli_handler(int argc, char *argv[])
 {
     /* Just to go to the next line */
     printf("\n");
-    avs_nvs_flash_erase();
+    va_nvs_flash_erase();
     return 0;
 }
 
@@ -177,12 +175,12 @@ static int crash_cli_handler(int argc, char *argv[])
 static esp_console_cmd_t diag_cmds[] = {
     {
         .command = "nvs-get",
-        .help = "<namespace> <variable> <string|blob|i8|u16>",
+        .help = "<variable> <string|blob|i8|u16>",
         .func = nvs_get_cli_handler,
     },
     {
         .command = "nvs-set",
-        .help = "<namespace> <variable> <string|i8|u16> <value>",
+        .help = "<variable> <string|i8|u16> <value>",
         .func = nvs_set_cli_handler,
     },
     {

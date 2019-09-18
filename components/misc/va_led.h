@@ -27,6 +27,7 @@ typedef enum va_led_set_colour {
 enum {
     LED_RESET = 100,
     LED_OFF,
+    LED_OTA,
 };
 
 typedef struct {
@@ -71,6 +72,7 @@ enum {
     VA_LED_FACTORY_RESET,
     VA_LED_OFF,
     VA_LED_DND,
+    VA_LED_OTA,
     VA_LED_PATTERN_MAX,
 };
 

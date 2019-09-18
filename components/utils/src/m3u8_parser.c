@@ -76,6 +76,12 @@ http_playlist_t *m3u8_parse(httpc_conn_t *h, const char *url, int *offset)
     content_len = content_len > 0 ? content_len : DEFAULT_CONTENT_LENGTH;
 
     char *buf = (char *) esp_audio_mem_calloc(1, content_len + 1);
+    if (!buf) {
+        ESP_LOGE(M3U8, "Not able to allocate buffer of size %d", content_len + 1);
+        playlist_free(playlist);
+        return NULL;
+    }
+
     remaining_bytes = content_len;
     while (remaining_bytes > 0) {
         rec_bytes = http_response_recv(h, buf + total_read, remaining_bytes);
@@ -90,11 +96,18 @@ http_playlist_t *m3u8_parse(httpc_conn_t *h, const char *url, int *offset)
         ESP_LOGI(M3U8, "buffer of %d bytes was not enough! Song may cut short!", DEFAULT_CONTENT_LENGTH);
     }
 
-    char *line, *b;
-    line = strtok_r(buf, "\n", &b);
     int flag = 0;
     unsigned long duration = 0;
     bool stop_skip = false;
+    char *line, *b;
+
+    line = strtok_r(buf, "\n", &b);
+    if (line == NULL) {
+        ESP_LOGE(M3U8, "No data to process! Error in http_response_recv?");
+        esp_audio_mem_free (buf);
+        playlist_free(playlist);
+        return NULL;
+    }
 
     if (!strncmp(line, M3U_TAG, sizeof(M3U_TAG) - 1)) { //This is EXTM3U
         while (line != NULL) {

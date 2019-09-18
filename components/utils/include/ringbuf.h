@@ -68,7 +68,7 @@ void rb_stat(ringbuf_t *rb);
 ssize_t rb_filled(ringbuf_t *rb);
 ssize_t rb_available(ringbuf_t *rb);
 int rb_read(ringbuf_t *rb, uint8_t *buf, int len, uint32_t ticks_to_wait);
-int rb_write(ringbuf_t *rb, uint8_t *buf, int len, uint32_t ticks_to_wait);
+int rb_write(ringbuf_t *rb, const uint8_t *buf, int len, uint32_t ticks_to_wait);
 void rb_cleanup(ringbuf_t *rb);
 void rb_signal_writer_finished(ringbuf_t *rb);
 void rb_wakeup_reader(ringbuf_t *rb);

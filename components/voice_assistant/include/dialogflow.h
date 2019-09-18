@@ -17,8 +17,6 @@ typedef struct {
 
 /** The Dialogflow Configuration Structure */
 typedef struct {
-    /** Configuration for the Auth Delegate */
-    auth_delegate_config_t auth_delegate;
     va_playback_config_t va_playback;
     /** Configurations for the device */
     dialogflow_device_config_t device_config;
@@ -74,5 +72,14 @@ void dialogflow_app_query_text_transcript(char *text, bool is_final);
  *      complete. The user can press the TTT and continue the conversation.
  */
 enum dialogflow_conversation_type dialogflow_app_response_data(Google__Cloud__Dialogflow__V2beta1__StreamingDetectIntentResponse *response);
+
+/** Notify the voice assistant of a text recognize event
+ *
+ * The application can call this function when it wants to initiate communication with the voice assistant through a text.
+ *
+ * \param[in] buf       Buffer with the text query.
+ * \param[in] buf_size  Length of the text query.
+ */
+int dialogflow_text_recognizer_recognize(char *buf, int buf_size);
 
 #endif /*_DIALOGFLOW_H_ */

@@ -190,35 +190,60 @@ static http_playback_stream_t *http_playback_stream_create(http_playback_stream_
  */
 esp_err_t http_playback_stream_create_or_renew_session(http_playback_stream_t *hstream)
 {
+    int ret = 0;
     if (!hstream->handle) {
         esp_tls_cfg_t tls_cfg = {
             .use_global_ca_store = true,
         };
-        if (!(hstream->handle = http_connection_new(hstream->cfg.url, &tls_cfg))) {
-            return ESP_FAIL;
-        }
-    }
-
-    int sockfd = http_connection_get_sockfd(hstream->handle);
-    int keepalive_enable = 1;
-    int keepalive_idle_time = 30; // In seconds
-    int keepalive_probe_count = 10; // In seconds
-    int keepalive_probe_interval = 10; // In seconds
-
-    if ((setsockopt(sockfd, SOL_SOCKET, SO_KEEPALIVE, &keepalive_enable, sizeof(int)) == 0) &&
-            (setsockopt(sockfd, IPPROTO_TCP, TCP_KEEPIDLE, &keepalive_idle_time, sizeof(int)) == 0) &&
-            (setsockopt(sockfd, IPPROTO_TCP, TCP_KEEPCNT, &keepalive_probe_count, sizeof(int)) == 0) &&
-            (setsockopt(sockfd, IPPROTO_TCP, TCP_KEEPINTVL, &keepalive_probe_interval, sizeof(int)) == 0)) {
-        ESP_LOGI(TAG, "TCP Keep-alive enabled for idle timeout: %d, interval: %d, count: %d", keepalive_idle_time, keepalive_probe_interval, keepalive_probe_count);
-    } else {
-        ESP_LOGI(TAG, "Failed to enable TCP keepalive");
+        while (1) {
+            ret = http_connection_new_async(hstream->cfg.url, &tls_cfg, &hstream->handle);
+            if (!hstream->base._run || ret == -1) {
+                ESP_LOGE(TAG, "http_connection_new_async failed! _run = %d, ret = %d, line %d", hstream->base._run, ret, __LINE__);
+                return ESP_FAIL;
+            } else if (ret) {
+                break;
+            }
+            /**
+             * First attempt is half way through.
+             * Retry after some time to avoid watachdog trigger in case it keeps failing
+             */
+            vTaskDelay(10);
+        };
+        http_connection_set_keepalive_and_recv_timeout(hstream->handle);
     }
 
     do {
-        hstream->handle = http_renew_session(hstream->handle, ESP_HTTP_GET, hstream->cfg.url);
-        if (!hstream->handle) {
+        http_request_delete(hstream->handle); /* Delete old request */
+        if (http_connection_new_needed(hstream->handle, hstream->cfg.url)) {
+            http_connection_delete(hstream->handle); /* Delete old connection */
+            hstream->handle = NULL;
+            /* Create new connection */
+            esp_tls_cfg_t tls_cfg = {
+                .use_global_ca_store = true,
+            };
+            while (1) {
+                ret = http_connection_new_async(hstream->cfg.url, &tls_cfg, &hstream->handle);
+                if (!hstream->base._run || ret == -1) {
+                    ESP_LOGE(TAG, "http_connection_new_async failed! _run = %d, ret = %d, line %d", hstream->base._run, ret, __LINE__);
+                    return ESP_FAIL;
+                } else if (ret) {
+                    break;
+                }
+                /**
+                 * First attempt is half way through.
+                 * Retry after some time delay to avoid watachdog trigger in case it keeps failing
+                 */
+                vTaskDelay(10);
+            };
+            http_connection_set_keepalive_and_recv_timeout(hstream->handle);
+        }
+
+        if(http_request_new(hstream->handle, ESP_HTTP_GET, hstream->cfg.url) < 0) {
+            http_connection_delete(hstream->handle);
+            hstream->handle = NULL;
             return ESP_FAIL;
         }
+
         if ((http_request_send(hstream->handle, NULL, 0) < 0) ||
                 (http_header_fetch(hstream->handle) < 0)) {
             http_request_delete(hstream->handle);

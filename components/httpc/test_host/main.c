@@ -12,9 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <stdlib.h>
 #include <string.h>
 
 #include <httpc.h>
+
+FILE *fp;
 
 static int validate_status_code(httpc_conn_t *h, int expected_code)
 {
@@ -58,7 +61,7 @@ static int test_postman_get_multi()
             return -1;
         }
 
-        char *expected_result = "{\"args\":{},\"headers\":{\"host\":\"postman-echo.com\",\"x-forwarded-port\":\"443\",\"x-forwarded-proto\":\"https\"},\"url\":\"https://postman-echo.com/get\"}";
+        char *expected_result = "{\"args\":{},\"headers\":{\"x-forwarded-proto\":\"https\",\"host\":\"postman-echo.com\",\"user-agent\":\"ESP32 HTTP Client/1.0\",\"x-forwarded-port\":\"443\"},\"url\":\"https://postman-echo.com/get\"}";
         if (validate_data(0, expected_result, buf, data_read)) {
             return -1;
         }
@@ -80,7 +83,7 @@ static int test_postman_get_multi()
             return -1;
         }
 
-        char *expected_result = "{\"args\":{},\"headers\":{\"host\":\"postman-echo.com\",\"x-forwarded-port\":\"443\",\"x-forwarded-proto\":\"https\"},\"url\":\"https://postman-echo.com/get\"}";
+        char *expected_result = "{\"args\":{},\"headers\":{\"x-forwarded-proto\":\"https\",\"host\":\"postman-echo.com\",\"user-agent\":\"ESP32 HTTP Client/1.0\",\"x-forwarded-port\":\"443\"},\"url\":\"https://postman-echo.com/get\"}";
         if (validate_data(current_index, expected_result, buf, data_read)) {
             return -1;
         }
@@ -107,7 +110,7 @@ static int test_postman_get_multi()
                 return -1;
             }
 
-            char *expected_result = "{\"args\":{},\"headers\":{\"host\":\"postman-echo.com\",\"x-forwarded-port\":\"443\",\"x-forwarded-proto\":\"https\"},\"url\":\"https://postman-echo.com/get\"}";
+            char *expected_result = "{\"args\":{},\"headers\":{\"x-forwarded-proto\":\"https\",\"host\":\"postman-echo.com\",\"user-agent\":\"ESP32 HTTP Client/1.0\",\"x-forwarded-port\":\"443\"},\"url\":\"https://postman-echo.com/get\"}";
             if (validate_data(current_index, expected_result, buf, data_read)) {
                 return -1;
             }
@@ -136,7 +139,7 @@ static int test_postman_get_multi()
                 return -1;
             }
 
-            char *expected_result = "{\"args\":{\"variable\":\"value\",\"a\":\"b\"},\"headers\":{\"host\":\"postman-echo.com\",\"x-forwarded-port\":\"443\",\"x-forwarded-proto\":\"https\"},\"url\":\"https://postman-echo.com/get?variable=value&a=b\"}";
+            char *expected_result = "{\"args\":{\"variable\":\"value\",\"a\":\"b\"},\"headers\":{\"x-forwarded-proto\":\"https\",\"host\":\"postman-echo.com\",\"user-agent\":\"ESP32 HTTP Client/1.0\",\"x-forwarded-port\":\"443\"},\"url\":\"https://postman-echo.com/get?variable=value&a=b\"}";
 
             if (validate_data(current_index, expected_result, buf, data_read)) {
                 return -1;
@@ -175,7 +178,7 @@ static int test_postman_get_multi_with_header_fetch()
             return -1;
         }
 
-        char *expected_result = "{\"args\":{},\"headers\":{\"host\":\"postman-echo.com\",\"x-forwarded-port\":\"443\",\"x-forwarded-proto\":\"https\"},\"url\":\"https://postman-echo.com/get\"}";
+        char *expected_result = "{\"args\":{},\"headers\":{\"x-forwarded-proto\":\"https\",\"host\":\"postman-echo.com\",\"user-agent\":\"ESP32 HTTP Client/1.0\",\"x-forwarded-port\":\"443\"},\"url\":\"https://postman-echo.com/get\"}";
         if (validate_data(0, expected_result, buf, data_read)) {
             return -1;
         }
@@ -198,7 +201,7 @@ static int test_postman_get_multi_with_header_fetch()
             return -1;
         }
 
-        char *expected_result = "{\"args\":{},\"headers\":{\"host\":\"postman-echo.com\",\"x-forwarded-port\":\"443\",\"x-forwarded-proto\":\"https\"},\"url\":\"https://postman-echo.com/get\"}";
+        char *expected_result = "{\"args\":{},\"headers\":{\"x-forwarded-proto\":\"https\",\"host\":\"postman-echo.com\",\"user-agent\":\"ESP32 HTTP Client/1.0\",\"x-forwarded-port\":\"443\"},\"url\":\"https://postman-echo.com/get\"}";
         if (validate_data(current_index, expected_result, buf, data_read)) {
             return -1;
         }
@@ -226,7 +229,7 @@ static int test_postman_get_multi_with_header_fetch()
                 return -1;
             }
 
-            char *expected_result = "{\"args\":{},\"headers\":{\"host\":\"postman-echo.com\",\"x-forwarded-port\":\"443\",\"x-forwarded-proto\":\"https\"},\"url\":\"https://postman-echo.com/get\"}";
+            char *expected_result = "{\"args\":{},\"headers\":{\"x-forwarded-proto\":\"https\",\"host\":\"postman-echo.com\",\"user-agent\":\"ESP32 HTTP Client/1.0\",\"x-forwarded-port\":\"443\"},\"url\":\"https://postman-echo.com/get\"}";
             if (validate_data(current_index, expected_result, buf, data_read)) {
                 return -1;
             }
@@ -256,7 +259,7 @@ static int test_postman_get_multi_with_header_fetch()
                 return -1;
             }
 
-            char *expected_result = "{\"args\":{\"variable\":\"value\",\"a\":\"b\"},\"headers\":{\"host\":\"postman-echo.com\",\"x-forwarded-port\":\"443\",\"x-forwarded-proto\":\"https\"},\"url\":\"https://postman-echo.com/get?variable=value&a=b\"}";
+            char *expected_result = "{\"args\":{\"variable\":\"value\",\"a\":\"b\"},\"headers\":{\"x-forwarded-proto\":\"https\",\"host\":\"postman-echo.com\",\"user-agent\":\"ESP32 HTTP Client/1.0\",\"x-forwarded-port\":\"443\"},\"url\":\"https://postman-echo.com/get?variable=value&a=b\"}";
             if (validate_data(current_index, expected_result, buf, data_read)) {
                 return -1;
             }
@@ -289,7 +292,7 @@ static int test_postman_get()
         return -1;
     }
 
-    char *expected_result = "{\"args\":{},\"headers\":{\"host\":\"postman-echo.com\",\"x-forwarded-port\":\"443\",\"x-forwarded-proto\":\"https\"},\"url\":\"https://postman-echo.com/get\"}";
+    char *expected_result = "{\"args\":{},\"headers\":{\"x-forwarded-proto\":\"https\",\"host\":\"postman-echo.com\",\"user-agent\":\"ESP32 HTTP Client/1.0\",\"x-forwarded-port\":\"443\"},\"url\":\"https://postman-echo.com/get\"}";
     if (validate_data(0, expected_result, buf, data_read)) {
         return -1;
     }
@@ -323,7 +326,7 @@ static int test_postman_send_custom_hdrs()
         return -1;
     }
 
-    char *expected_result = "{\"args\":{},\"headers\":{\"host\":\"postman-echo.com\",\"custom-hdr\":\"my-hdr\",\"x-forwarded-port\":\"443\",\"x-forwarded-proto\":\"https\"},\"url\":\"https://postman-echo.com/get\"}";
+    char *expected_result = "{\"args\":{},\"headers\":{\"x-forwarded-proto\":\"https\",\"host\":\"postman-echo.com\",\"custom-hdr\":\"my-hdr\",\"x-forwarded-port\":\"443\"},\"url\":\"https://postman-echo.com/get\"}";
     if (validate_data(0, expected_result, buf, data_read)) {
         return -1;
     }
@@ -352,7 +355,7 @@ static int test_postman_http_get()
         return -1;
     }
 
-    char *expected_result = "{\"args\":{},\"headers\":{\"host\":\"postman-echo.com\",\"x-forwarded-port\":\"80\",\"x-forwarded-proto\":\"http\"},\"url\":\"http://postman-echo.com/get\"}";
+    char *expected_result = "{\"args\":{},\"headers\":{\"x-forwarded-proto\":\"https\",\"host\":\"postman-echo.com\",\"user-agent\":\"ESP32 HTTP Client/1.0\",\"x-forwarded-port\":\"80\"},\"url\":\"https://postman-echo.com/get\"}";
     if (validate_data(0, expected_result, buf, data_read)) {
         return -1;
     }
@@ -381,7 +384,7 @@ static int test_postman_get_with_full_path()
     if (validate_status_code(h, 200)) {
         return -1;
     }
-    char *expected_result = "{\"args\":{\"a\":\"b\",\"c\":\"d\"},\"headers\":{\"host\":\"postman-echo.com\",\"x-forwarded-port\":\"443\",\"x-forwarded-proto\":\"https\"},\"url\":\"https://postman-echo.com/get?a=b&c=d\"}";
+    char *expected_result = "{\"args\":{\"a\":\"b\",\"c\":\"d\"},\"headers\":{\"x-forwarded-proto\":\"https\",\"host\":\"postman-echo.com\",\"user-agent\":\"ESP32 HTTP Client/1.0\",\"x-forwarded-port\":\"443\"},\"url\":\"https://postman-echo.com/get?a=b&c=d\"}";
     if (validate_data(0, expected_result, buf, data_read)) {
         return -1;
     }
@@ -397,11 +400,6 @@ struct hdr_value_check {
     bool seen;
     bool skip_check;
 } hdr_value_check[] = {
-    {"Access-Control-Allow-Credentials", "", false, false},
-    {"Access-Control-Allow-Headers", "", false, false},
-    {"Access-Control-Allow-Methods", "", false, false},
-    {"Access-Control-Allow-Origin", "", false, false},
-    {"Access-Control-Expose-Headers", "", false, false},
     {"Content-Type", "application/json; charset=utf-8", false, false},
     {"Date", "", false, true},
     {"ETAG", "", false, true},
@@ -413,7 +411,12 @@ struct hdr_value_check {
     {"set-cookie", "", false, true},
     {"Vary", "Accept-Encoding", false, false},
     {"Content-Length", "143", false, false},
-    {"Connection", "keep-alive", false, false}
+    {"Connection", "keep-alive", false, false},
+    {"Access-Control-Allow-Credentials", "", false, false},
+    {"Access-Control-Allow-Headers", "", false, false},
+    {"Access-Control-Allow-Methods", "", false, false},
+    {"Access-Control-Allow-Origin", "", false, false},
+    {"Access-Control-Expose-Headers", "", false, false},
 };
 
 static int i = 0;
@@ -438,7 +441,7 @@ static void all_hdr_val_check()
 {
     for (i = 0; i < sizeof(hdr_value_check) / sizeof(struct hdr_value_check) ; i++) {
         if (hdr_value_check[i].seen == false) {
-            printf("Fail");
+            printf("all_hdr_val_check failed!\n");
             return;
         }
     }
@@ -495,6 +498,8 @@ int main(int argc, char *argv[])
     char *url = "https://postman-echo.com";
     char *path = "/get";
     char *data = "";
+    char *file_name = NULL;
+    bool out_file_defined = false;
 
     /* Assume that argv[1] is url, and argv[2] is path */
     if (argc >= 4) {
@@ -504,14 +509,22 @@ int main(int argc, char *argv[])
         if (argc == 5) {
             data = argv[4];
         }
+        if (argc == 6) {
+            file_name = argv[5];
+            fp = fopen(file_name, "w+");
+            if (fp) {
+                out_file_defined = true;
+            }
+        }
     } else if (argc == 2) {
         op_str = argv[1];
     } else {
         printf("Using default parameters \"GET %s %s\n", url, path);
         printf("Usage:\n");
-        printf("      <cmd-name> GET https://postman-echo.com \"/get?a=b&c=d\"\n");
-        printf("      <cmd-name> POST https://postman-echo.com /post \"a=b&c=d\"\n");
-        printf("      <cmd-name> TEST\n");
+        printf("      %s GET https://postman-echo.com \"/get?a=b&c=d\" <-o out_file> \n", argv[0]);
+        printf("      %s POST https://postman-echo.com /post \"a=b&c=d\"\n", argv[0]);
+        printf("      %s TEST\n", argv[0]);
+        return 0;
     }
 
     httpc_ops_t op = -1;
@@ -528,10 +541,21 @@ int main(int argc, char *argv[])
     http_request_new(h, op, path);
     http_request_send(h, data, strlen(data));
     char buf[700];
-    int data_read;
+    int data_read, total_data_read = 0;
     while ((data_read = http_response_recv(h, buf, sizeof(buf)))) {
-        printf("Data read: %d\n", data_read);
-        printf("Data is: %.*s\n", data_read, buf);
+        total_data_read += data_read;
+        if (out_file_defined) {
+            //Write data to file
+            fwrite(buf, data_read, 1, fp);
+        } else {
+            printf("Data is: %.*s\n", data_read, buf);
+        }
     }
 
+    printf ("\nTotal data read = %d bytes\n", total_data_read);
+
+    if (out_file_defined) {
+        fclose(fp);
+    }
+    return 0;
 }

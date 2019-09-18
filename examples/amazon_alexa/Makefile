@@ -12,12 +12,15 @@ endif
 
 include $(AUDIO_BOARD_PATH)/audio_board.mk
 
-EXTRA_COMPONENT_DIRS += $(PROJECT_PATH)/additional_components $(PROJECT_PATH)/../../components $(AUDIO_BOARD_PATH)/../../../ 
+EXTRA_COMPONENT_DIRS += $(PROJECT_PATH)/additional_components $(PROJECT_PATH)/../../components $(AUDIO_BOARD_PATH)/../../../
 
 ifneq ($(SHF_PATH),)
     EXTRA_COMPONENT_DIRS += $(SHF_PATH)/components
 endif
 
+ifneq ($(CLOUD_AGENT_PATH),)
+  EXTRA_COMPONENT_DIRS += $(CLOUD_AGENT_PATH)/components
+endif
 
 ifdef DSP_EN_SPI_FFS
 MKSPIFFS_PATH=$(PROJECT_PATH)/../../tools/mkspiffs
@@ -45,7 +48,7 @@ all_binaries: build/spiffs-alexa-img.bin print_spiffs
 clean: spiffs_clean
 spiffs_flash: spiffs_make flash
 
-SPIFFS_OFFSET := 0x410000
+SPIFFS_OFFSET := 0x860000
 SPIFFS_BIN := $(PROJECT_PATH)/build/spiffs-alexa-img.bin
 DETECTED_OS := $(shell uname -s)
 DETECTED_ARCHITECTURE := $(shell uname -m)

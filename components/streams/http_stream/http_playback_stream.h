@@ -34,7 +34,6 @@
 #include <audio_stream.h>
 #include "httpc.h"
 #include <unistd.h>
-#include <http_playlist.h>
 #include <http_hls.h>
 
 #ifdef __cplusplus

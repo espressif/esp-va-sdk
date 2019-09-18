@@ -66,9 +66,9 @@ typedef enum {
 } audio_codec_state_t;
 
 enum {
-    CODEC_FAIL = 0,
+    CODEC_FAIL = ESP_FAIL,
+    CODEC_OK   = 0,
     CODEC_DONE = 1,
-    CODEC_OK
 };
 
 typedef struct audio_codec_audio_info {
@@ -82,6 +82,7 @@ typedef struct audio_codec_audio_info {
 typedef enum {
     CODEC_EVENT_STARTED = CODEC_EVENT_START_NUM,
     CODEC_EVENT_STOPPED,
+    CODEC_EVENT_FAILED,
     CODEC_EVENT_PAUSED,
     CODEC_EVENT_DESTROYED,
     CODEC_EVENT_SET_FREQ,

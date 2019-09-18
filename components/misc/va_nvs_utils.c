@@ -26,11 +26,12 @@
 #include <esp_log.h>
 #include <nvs_flash.h>
 
-#include "avs_nvs_utils.h"
+#include "va_nvs_utils.h"
 
 #define NVS_TASK_STACK_SIZE 2048
+#define VA_NVS_NAMESPACE "avs"
 
-static const char *TAG = "[avs_nvs_utils]";
+static const char *TAG = "[va_nvs_utils]";
 
 /* TODO: As of now, this utility will create a task for every NVS get/set operation. This is required,
  * only if a task having stack in SPIRAM needs NVS functionality. In future, we can add a check
@@ -123,18 +124,27 @@ static void nvs_task(void *arg)
 done:
     /* Notify calling task */
     xTaskNotify(params->calling_task_handle, ret, eSetValueWithOverwrite);
-    vTaskDelete(NULL);
 }
 
-esp_err_t avs_nvs_set_blob(const char *ns, const char *key, uint8_t *val_buf, size_t buf_size)
+esp_err_t va_nvs_set_blob(const char *key, uint8_t *val_buf, size_t buf_size)
 {
-    struct nvs_ops_params tp = {ns, key, val_buf, &buf_size, SET, BLOB, xTaskGetCurrentTaskHandle()};
-    /* This will create a thread, do NVS operation and complete the thread */
-    TaskHandle_t nvs_task_handle;
-    xTaskCreate(nvs_task, "nvs_task", NVS_TASK_STACK_SIZE, &tp, CONFIG_ESP32_PTHREAD_TASK_PRIO_DEFAULT, &nvs_task_handle);
+    struct nvs_ops_params tp = {VA_NVS_NAMESPACE, key, val_buf, &buf_size, SET, BLOB, xTaskGetCurrentTaskHandle()};
+    esp_timer_handle_t nvs_task_handle;
+    esp_timer_create_args_t timer_arg = {
+        .callback = nvs_task,
+        .arg = &tp,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "va_nvs_set_blob",
+    };
+    if (esp_timer_create(&timer_arg, &nvs_task_handle) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to create timer to set %s in NVS", key);
+        return ESP_FAIL;
+    }
+    esp_timer_start_once(nvs_task_handle, 0);
     uint32_t result;
     /* Wait for operation to complete */
     xTaskNotifyWait(0, 0, &result, portMAX_DELAY);
+    esp_timer_delete(nvs_task_handle);
     if ((int)result != ESP_OK) {
         return ESP_FAIL;
     } else {
@@ -142,15 +152,25 @@ esp_err_t avs_nvs_set_blob(const char *ns, const char *key, uint8_t *val_buf, si
     }
 }
 
-esp_err_t avs_nvs_get_blob(const char *ns, const char *key, uint8_t *val_buf, size_t *buf_size)
+esp_err_t va_nvs_get_blob(const char *key, uint8_t *val_buf, size_t *buf_size)
 {
-    struct nvs_ops_params tp = {ns, key, val_buf, buf_size, GET, BLOB, xTaskGetCurrentTaskHandle()};
-    /* This will create a thread, do NVS operation and complete the thread */
-    TaskHandle_t nvs_task_handle;
-    xTaskCreate(nvs_task, "nvs_task", NVS_TASK_STACK_SIZE, &tp, CONFIG_ESP32_PTHREAD_TASK_PRIO_DEFAULT, &nvs_task_handle);
+    struct nvs_ops_params tp = {VA_NVS_NAMESPACE, key, val_buf, buf_size, GET, BLOB, xTaskGetCurrentTaskHandle()};
+    esp_timer_handle_t nvs_task_handle;
+    esp_timer_create_args_t timer_arg = {
+        .callback = nvs_task,
+        .arg = &tp,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "va_nvs_get_blob",
+    };
+    if (esp_timer_create(&timer_arg, &nvs_task_handle) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to create timer to set %s in NVS", key);
+        return ESP_FAIL;
+    }
+    esp_timer_start_once(nvs_task_handle, 0);
     uint32_t result;
     /* Wait for operation to complete */
     xTaskNotifyWait(0, 0, &result, portMAX_DELAY);
+    esp_timer_delete(nvs_task_handle);
     if ((int)result != ESP_OK) {
         return ESP_FAIL;
     } else {
@@ -158,15 +178,25 @@ esp_err_t avs_nvs_get_blob(const char *ns, const char *key, uint8_t *val_buf, si
     }
 }
 
-esp_err_t avs_nvs_set_str(const char *ns, const char *key, char *val_buf)
+esp_err_t va_nvs_set_str(const char *key, char *val_buf)
 {
-    struct nvs_ops_params tp = {ns, key, val_buf, NULL, SET, STR, xTaskGetCurrentTaskHandle()};
-    /* This will create a thread, do NVS operation and complete the thread */
-    TaskHandle_t nvs_task_handle;
-    xTaskCreate(nvs_task, "nvs_task", NVS_TASK_STACK_SIZE, &tp, CONFIG_ESP32_PTHREAD_TASK_PRIO_DEFAULT, &nvs_task_handle);
+    struct nvs_ops_params tp = {VA_NVS_NAMESPACE, key, val_buf, NULL, SET, STR, xTaskGetCurrentTaskHandle()};
+    esp_timer_handle_t nvs_task_handle;
+    esp_timer_create_args_t timer_arg = {
+        .callback = nvs_task,
+        .arg = &tp,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "va_nvs_set_str",
+    };
+    if (esp_timer_create(&timer_arg, &nvs_task_handle) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to create timer to set %s in NVS", key);
+        return ESP_FAIL;
+    }
+    esp_timer_start_once(nvs_task_handle, 0);
     uint32_t result;
     /* Wait for operation to complete */
     xTaskNotifyWait(0, 0, &result, portMAX_DELAY);
+    esp_timer_delete(nvs_task_handle);
     if ((int)result != ESP_OK) {
         return ESP_FAIL;
     } else {
@@ -174,15 +204,25 @@ esp_err_t avs_nvs_set_str(const char *ns, const char *key, char *val_buf)
     }
 }
 
-esp_err_t avs_nvs_get_str(const char *ns, const char *key, char *val_buf, size_t *buf_size)
+esp_err_t va_nvs_get_str(const char *key, char *val_buf, size_t *buf_size)
 {
-    struct nvs_ops_params tp = {ns, key, val_buf, buf_size, GET, STR, xTaskGetCurrentTaskHandle()};
-    /* This will create a thread, do NVS operation and complete the thread */
-    TaskHandle_t nvs_task_handle;
-    xTaskCreate(nvs_task, "nvs_task", NVS_TASK_STACK_SIZE, &tp, CONFIG_ESP32_PTHREAD_TASK_PRIO_DEFAULT, &nvs_task_handle);
+    struct nvs_ops_params tp = {VA_NVS_NAMESPACE, key, val_buf, buf_size, GET, STR, xTaskGetCurrentTaskHandle()};
+    esp_timer_handle_t nvs_task_handle;
+    esp_timer_create_args_t timer_arg = {
+        .callback = nvs_task,
+        .arg = &tp,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "va_nvs_get_str",
+    };
+    if (esp_timer_create(&timer_arg, &nvs_task_handle) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to create timer to set %s in NVS", key);
+        return ESP_FAIL;
+    }
+    esp_timer_start_once(nvs_task_handle, 0);
     uint32_t result;
     /* Wait for operation to complete */
     xTaskNotifyWait(0, 0, &result, portMAX_DELAY);
+    esp_timer_delete(nvs_task_handle);
     if ((int)result != ESP_OK) {
         return ESP_FAIL;
     } else {
@@ -190,15 +230,25 @@ esp_err_t avs_nvs_get_str(const char *ns, const char *key, char *val_buf, size_t
     }
 }
 
-esp_err_t avs_nvs_set_i8(const char *ns, const char *key, int8_t val_buf)
+esp_err_t va_nvs_set_i8(const char *key, int8_t val_buf)
 {
-    struct nvs_ops_params tp = {ns, key, val_buf, NULL, SET, I8, xTaskGetCurrentTaskHandle()};
-    /* This will create a thread, do NVS operation and complete the thread */
-    TaskHandle_t nvs_task_handle;
-    xTaskCreate(nvs_task, "nvs_task", NVS_TASK_STACK_SIZE, &tp, CONFIG_ESP32_PTHREAD_TASK_PRIO_DEFAULT, &nvs_task_handle);
+    struct nvs_ops_params tp = {VA_NVS_NAMESPACE, key, val_buf, NULL, SET, I8, xTaskGetCurrentTaskHandle()};
+    esp_timer_handle_t nvs_task_handle;
+    esp_timer_create_args_t timer_arg = {
+        .callback = nvs_task,
+        .arg = &tp,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "va_nvs_set_i8",
+    };
+    if (esp_timer_create(&timer_arg, &nvs_task_handle) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to create timer to set %s in NVS", key);
+        return ESP_FAIL;
+    }
+    esp_timer_start_once(nvs_task_handle, 0);
     uint32_t result;
     /* Wait for operation to complete */
     xTaskNotifyWait(0, 0, &result, portMAX_DELAY);
+    esp_timer_delete(nvs_task_handle);
     if ((int)result != ESP_OK) {
         return ESP_FAIL;
     } else {
@@ -206,15 +256,25 @@ esp_err_t avs_nvs_set_i8(const char *ns, const char *key, int8_t val_buf)
     }
 }
 
-esp_err_t avs_nvs_get_i8(const char *ns, const char *key, int8_t *val_buf)
+esp_err_t va_nvs_get_i8(const char *key, int8_t *val_buf)
 {
-    struct nvs_ops_params tp = {ns, key, val_buf, NULL, GET, I8, xTaskGetCurrentTaskHandle()};
-    /* This will create a thread, do NVS operation and complete the thread */
-    TaskHandle_t nvs_task_handle;
-    xTaskCreate(nvs_task, "nvs_task", NVS_TASK_STACK_SIZE, &tp, CONFIG_ESP32_PTHREAD_TASK_PRIO_DEFAULT, &nvs_task_handle);
+    struct nvs_ops_params tp = {VA_NVS_NAMESPACE, key, val_buf, NULL, GET, I8, xTaskGetCurrentTaskHandle()};
+    esp_timer_handle_t nvs_task_handle;
+    esp_timer_create_args_t timer_arg = {
+        .callback = nvs_task,
+        .arg = &tp,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "va_nvs_get_i8",
+    };
+    if (esp_timer_create(&timer_arg, &nvs_task_handle) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to create timer to set %s in NVS", key);
+        return ESP_FAIL;
+    }
+    esp_timer_start_once(nvs_task_handle, 0);
     uint32_t result;
     /* Wait for operation to complete */
     xTaskNotifyWait(0, 0, &result, portMAX_DELAY);
+    esp_timer_delete(nvs_task_handle);
     if ((int)result != ESP_OK) {
         return ESP_FAIL;
     } else {
@@ -222,15 +282,25 @@ esp_err_t avs_nvs_get_i8(const char *ns, const char *key, int8_t *val_buf)
     }
 }
 
-esp_err_t avs_nvs_set_u16(const char *ns, const char *key, uint16_t val_buf)
+esp_err_t va_nvs_set_u16(const char *key, uint16_t val_buf)
 {
-    struct nvs_ops_params tp = {ns, key, val_buf, NULL, SET, U16, xTaskGetCurrentTaskHandle()};
-    /* This will create a thread, do NVS operation and complete the thread */
-    TaskHandle_t nvs_task_handle;
-    xTaskCreate(nvs_task, "nvs_task", NVS_TASK_STACK_SIZE, &tp, CONFIG_ESP32_PTHREAD_TASK_PRIO_DEFAULT, &nvs_task_handle);
+    struct nvs_ops_params tp = {VA_NVS_NAMESPACE, key, val_buf, NULL, SET, U16, xTaskGetCurrentTaskHandle()};
+    esp_timer_handle_t nvs_task_handle;
+    esp_timer_create_args_t timer_arg = {
+        .callback = nvs_task,
+        .arg = &tp,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "va_nvs_set_u16",
+    };
+    if (esp_timer_create(&timer_arg, &nvs_task_handle) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to create timer to set %s in NVS", key);
+        return ESP_FAIL;
+    }
+    esp_timer_start_once(nvs_task_handle, 0);
     uint32_t result;
     /* Wait for operation to complete */
     xTaskNotifyWait(0, 0, &result, portMAX_DELAY);
+    esp_timer_delete(nvs_task_handle);
     if ((int)result != ESP_OK) {
         return ESP_FAIL;
     } else {
@@ -238,15 +308,25 @@ esp_err_t avs_nvs_set_u16(const char *ns, const char *key, uint16_t val_buf)
     }
 }
 
-esp_err_t avs_nvs_get_u16(const char *ns, const char *key, uint16_t *val_buf)
+esp_err_t va_nvs_get_u16(const char *key, uint16_t *val_buf)
 {
-    struct nvs_ops_params tp = {ns, key, val_buf, NULL, GET, U16, xTaskGetCurrentTaskHandle()};
-    /* This will create a thread, do NVS operation and complete the thread */
-    TaskHandle_t nvs_task_handle;
-    xTaskCreate(nvs_task, "nvs_task", NVS_TASK_STACK_SIZE, &tp, CONFIG_ESP32_PTHREAD_TASK_PRIO_DEFAULT, &nvs_task_handle);
+    struct nvs_ops_params tp = {VA_NVS_NAMESPACE, key, val_buf, NULL, GET, U16, xTaskGetCurrentTaskHandle()};
+    esp_timer_handle_t nvs_task_handle;
+    esp_timer_create_args_t timer_arg = {
+        .callback = nvs_task,
+        .arg = &tp,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "va_nvs_get_u16",
+    };
+    if (esp_timer_create(&timer_arg, &nvs_task_handle) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to create timer to set %s in NVS", key);
+        return ESP_FAIL;
+    }
+    esp_timer_start_once(nvs_task_handle, 0);
     uint32_t result;
     /* Wait for operation to complete */
     xTaskNotifyWait(0, 0, &result, portMAX_DELAY);
+    esp_timer_delete(nvs_task_handle);
     if ((int)result != ESP_OK) {
         return ESP_FAIL;
     } else {
@@ -254,15 +334,25 @@ esp_err_t avs_nvs_get_u16(const char *ns, const char *key, uint16_t *val_buf)
     }
 }
 
-esp_err_t avs_nvs_flash_erase()
+esp_err_t va_nvs_flash_erase()
 {
     struct nvs_ops_params tp = {NULL, NULL, NULL, 0, ERASE, INVALID, xTaskGetCurrentTaskHandle()};
-    /* This will create a thread, do NVS operation and complete the thread */
-    TaskHandle_t nvs_task_handle;
-    xTaskCreate(nvs_task, "nvs_task", NVS_TASK_STACK_SIZE, &tp, CONFIG_ESP32_PTHREAD_TASK_PRIO_DEFAULT, &nvs_task_handle);
+    esp_timer_handle_t nvs_task_handle;
+    esp_timer_create_args_t timer_arg = {
+        .callback = nvs_task,
+        .arg = &tp,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "va_nvs_flash_erase",
+    };
+    if (esp_timer_create(&timer_arg, &nvs_task_handle) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to create timer to erase flash in NVS");
+        return ESP_FAIL;
+    }
+    esp_timer_start_once(nvs_task_handle, 0);
     uint32_t result;
     /* Wait for operation to complete */
     xTaskNotifyWait(0, 0, &result, portMAX_DELAY);
+    esp_timer_delete(nvs_task_handle);
     if ((int)result != ESP_OK) {
         return ESP_FAIL;
     } else {
@@ -270,15 +360,25 @@ esp_err_t avs_nvs_flash_erase()
     }
 }
 
-esp_err_t avs_nvs_erase_key(const char *ns, const char *key)
+esp_err_t va_nvs_erase_key(const char *key)
 {
-    struct nvs_ops_params tp = {ns, key, NULL, NULL, ERASE, KEY, xTaskGetCurrentTaskHandle()};
-    /* This will create a thread, do NVS operation and complete the thread */
-    TaskHandle_t nvs_task_handle;
-    xTaskCreate(nvs_task, "nvs_task", NVS_TASK_STACK_SIZE, &tp, CONFIG_ESP32_PTHREAD_TASK_PRIO_DEFAULT, &nvs_task_handle);
+    struct nvs_ops_params tp = {VA_NVS_NAMESPACE, key, NULL, NULL, ERASE, KEY, xTaskGetCurrentTaskHandle()};
+    esp_timer_handle_t nvs_task_handle;
+    esp_timer_create_args_t timer_arg = {
+        .callback = nvs_task,
+        .arg = &tp,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "va_nvs_erase_key",
+    };
+    if (esp_timer_create(&timer_arg, &nvs_task_handle) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to create timer to erase %s in NVS", key);
+        return ESP_FAIL;
+    }
+    esp_timer_start_once(nvs_task_handle, 0);
     uint32_t result;
     /* Wait for operation to complete */
     xTaskNotifyWait(0, 0, &result, portMAX_DELAY);
+    esp_timer_delete(nvs_task_handle);
     if ((int)result != ESP_OK) {
         return ESP_FAIL;
     } else {

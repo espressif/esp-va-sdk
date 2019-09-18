@@ -46,12 +46,25 @@ static esp_err_t parse_http_config(void *base_stream)
     int ret;
     ESP_LOGI(HLSTAG, "Passing argument as %s to connection_new", bstream->cfg.url);
 
-    esp_tls_cfg_t tls_cfg;
-    memset(&tls_cfg, 0, sizeof(tls_cfg));
-    bstream->handle = http_connection_new(bstream->cfg.url, &tls_cfg);
-    if (bstream->handle == NULL) {
-        return ESP_FAIL;
-    }
+    esp_tls_cfg_t tls_cfg = {
+        .use_global_ca_store = true,
+    };
+
+    while (1) {
+        ret = http_connection_new_async(bstream->cfg.url, &tls_cfg, &bstream->handle);
+        if (!bstream->base._run || ret == -1) {
+            ESP_LOGE(HLSTAG, "http_connection_new_async failed! _run = %d, ret = %d, line %d", bstream->base._run, ret, __LINE__);
+            return ESP_FAIL;
+        } else if (ret) {
+            break;
+        }
+        /**
+         * First attempt is half way through.
+         * Retry after some time to avoid watachdog trigger in case it keeps failing
+         */
+        vTaskDelay(10);
+    };
+    http_connection_set_keepalive_and_recv_timeout(bstream->handle);
 
     if (bstream->base.type == STREAM_TYPE_READER) {
         ret = http_request_new(bstream->handle, ESP_HTTP_GET, bstream->cfg.url);

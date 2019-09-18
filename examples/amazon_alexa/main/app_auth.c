@@ -1,3 +1,6 @@
+// Copyright 2018 Espressif Systems (Shanghai) PTE LTD
+// All rights reserved.
+
 #include <esp_console.h>
 #include <esp_log.h>
 
@@ -8,6 +11,8 @@ static char *TAG = "[app-auth]";
 
 static int app_auth_sign_in_handler(int argc, char *argv[])
 {
+    /* Just to go to the next line */
+    printf("\n");
     if (argc != 4) {
         ESP_LOGE(TAG, "Invalid parameters");
         return -1;
@@ -25,6 +30,8 @@ static int app_auth_sign_in_handler(int argc, char *argv[])
 
 static int app_auth_sign_out_handler(int argc, char *argv[])
 {
+    /* Just to go to the next line */
+    printf("\n");
     alexa_auth_delegate_signout();
     return 0;
 }

@@ -1,4 +1,32 @@
 ## ChangeLog
+### 1.0-RC2 - 2019-08-13
+
+**Enhancements**
+
+* Added LED support for Error LED and Provisioning LED.
+* Memory optimisations to improve the overall functionality and stability.
+* Added an API to change the locale for amazon_alexa. Also added a cli for the same.
+* Added support for sign-in and sign-out via the app.
+* Added basic support for OTA. The APIs still need to be implemented by the application. (refer to examples/amazon_alexa/main/cloud_agent.h)
+* Support for Gaana (India) and Hungama (India) music streaming services.
+* Provisioning app for iOS has also been added. The existing Android app has been updated.
+* Added error message in addition to error LEDs when the wake word is detected and the device is having trouble processing it.
+* Added support for equalizer.
+* Added support for text queries for google_dialogflow. Also added a CLI for the same.
+
+**API Changes**
+
+* The 'avs_nvs_*' APIs have been changed to 'va_nvs' and 'avs' is used as the default namespace.
+* Authentication components have been moved from alexa.h to auth_delegate.h. Refer to the respective files for the changes.
+* `media_hal_data.c` is now made common and is not a part of `board_support_pkgs/<board_name>/esp_codec/` anymore.
+  * This complete logic is now moved to `components/media_hal/`. Please take a look at (media_hal_playback.h)[components/media_hal/].
+  * Audio board must initialize `media_hal` using `media_hal_init_playback` with config. For example, for (lyrat_board)[board_support_pkgs/lyrat/audio_boar/audio_board_lyrat/audio_board_lyrat.c].
+* APIs for tone have been changed to support the above media_hal change.
+
+**Bug Fixes**
+
+* Fixed some memory leaks.
+* Some fixes to pass Amazon's certification.
 
 ### 1.0-RC1 - 2019-05-14
 

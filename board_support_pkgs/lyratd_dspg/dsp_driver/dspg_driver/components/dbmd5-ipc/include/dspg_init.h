@@ -33,17 +33,10 @@
 #define AUDIO_BUF_SIZE 4096  //Default value
 #endif
 
-typedef enum {
-    ALEXA_IDLE = 0,
-    ALEXA_WW = 1,
-    ALEXA_TAP_TO_TALK = 2,
-    ALEXA_SPEECH_STARTED = 4,
-    ALEXA_MUTE = 8,
-} alexa_case_t;
-
 void dbmd5_init(QueueHandle_t queue);
+void dbmd5_reset();
+void dbmd5_enter_low_power();
 void dbmd5_aec_init();
-void dbmd5_get_status(alexa_case_t *alexa_case, size_t *phrase_len);
 void dbmd5_mic_mute();
 void dbmd5_mic_unmute();
 void dbmd5_tap_to_talk();

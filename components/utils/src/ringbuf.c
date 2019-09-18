@@ -147,6 +147,8 @@ int rb_read(ringbuf_t *rb, uint8_t *buf, int buf_len, uint32_t ticks_to_wait)
             buf += read_size;
         }
 
+        xSemaphoreGive(rb->can_write);
+
         if (buf_len == 0) {
             break;
         }
@@ -165,7 +167,9 @@ int rb_read(ringbuf_t *rb, uint8_t *buf, int buf_len, uint32_t ticks_to_wait)
             goto out;
         }
         if (rb->reader_unblock == 1) {
-            total_read_size = RB_READER_UNBLOCK;
+            if (total_read_size == 0) {
+                total_read_size = RB_READER_UNBLOCK;
+            }
             goto out;
         }
 
@@ -174,9 +178,6 @@ int rb_read(ringbuf_t *rb, uint8_t *buf, int buf_len, uint32_t ticks_to_wait)
 
     xSemaphoreGive(rb->lock);
 out:
-    if (total_read_size > 0) {
-        xSemaphoreGive(rb->can_write);
-    }
     if (rb->writer_finished == 1 && total_read_size == 0) {
         total_read_size = RB_WRITER_FINISHED;
     }
@@ -184,7 +185,7 @@ out:
     return total_read_size;
 }
 
-int rb_write(ringbuf_t *rb, uint8_t *buf, int buf_len, uint32_t ticks_to_wait)
+int rb_write(ringbuf_t *rb, const uint8_t *buf, int buf_len, uint32_t ticks_to_wait)
 {
     int write_size;
     int total_write_size = 0;
@@ -223,6 +224,8 @@ int rb_write(ringbuf_t *rb, uint8_t *buf, int buf_len, uint32_t ticks_to_wait)
         total_write_size += write_size;
         buf += write_size;
 
+        xSemaphoreGive(rb->can_read);
+
         if (buf_len == 0) {
             break;
         }
@@ -242,9 +245,6 @@ int rb_write(ringbuf_t *rb, uint8_t *buf, int buf_len, uint32_t ticks_to_wait)
 
     xSemaphoreGive(rb->lock);
 out:
-    if (total_write_size != 0 ) {
-        xSemaphoreGive(rb->can_read);
-    }
     return total_write_size;
 }
 

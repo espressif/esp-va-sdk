@@ -24,8 +24,7 @@ static const char *TAG = "httpc";
 #ifdef ESP_PLATFORM
 #include <esp_log.h>
 #else
-#define ESP_LOGD(TAG, ...) //printf(__VA_ARGS__);
-#define ESP_LOGE(TAG, ...) printf(__VA_ARGS__);
+#include "mbedtls/esp_debug.h"
 #endif
 
 static int get_port(const char *url, struct http_parser_url *u)
@@ -51,6 +50,37 @@ static bool is_url_tls(const char *url, struct http_parser_url *u)
         return true;
     }
     return false;
+}
+
+void http_connection_set_keepalive_and_recv_timeout(httpc_conn_t *httpc)
+{
+    if (!httpc) {
+        ESP_LOGE(TAG, "Connection handle is null. Line = %d", __LINE__);
+        return;
+    }
+
+    int keepalive_enable = 1;
+    int keepalive_idle_time = 30; // In seconds
+    int keepalive_probe_count = 10; // In seconds
+    int keepalive_probe_interval = 10; // In seconds
+
+    int sockfd = httpc->tls->sockfd;
+
+    if ((setsockopt(sockfd, SOL_SOCKET, SO_KEEPALIVE, &keepalive_enable, sizeof(int)) == 0) &&
+            (setsockopt(sockfd, IPPROTO_TCP, TCP_KEEPIDLE, &keepalive_idle_time, sizeof(int)) == 0) &&
+            (setsockopt(sockfd, IPPROTO_TCP, TCP_KEEPCNT, &keepalive_probe_count, sizeof(int)) == 0) &&
+            (setsockopt(sockfd, IPPROTO_TCP, TCP_KEEPINTVL, &keepalive_probe_interval, sizeof(int)) == 0)) {
+        ESP_LOGI(TAG, "TCP Keep-alive enabled for idle timeout: %d, interval: %d, count: %d", keepalive_idle_time, keepalive_probe_interval, keepalive_probe_count);
+    } else {
+        ESP_LOGI(TAG, "Failed to enable TCP keepalive");
+    }
+
+    /* Set Receive timeout */
+    struct timeval tv = {
+        .tv_sec = 10, /* 10 sec */
+        .tv_usec = 0,
+    };
+    setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 }
 
 static int http_response_read_and_parse(httpc_conn_t *httpc, char *buf, size_t buf_len,
@@ -86,7 +116,7 @@ static int http_response_read_and_parse(httpc_conn_t *httpc, char *buf, size_t b
 
 static int header_parser(httpc_conn_t *httpc, char *buf, size_t buf_len)
 {
-    while (httpc->request.status < ESP_HTTP_RESP_HDR_RECEIVED) {
+    while (httpc->state < ESP_HTTP_RESP_HDR_RECEIVED) {
         int status = http_response_read_and_parse(httpc, buf, buf_len, false);
         if (status < 0) {
             return status;
@@ -97,35 +127,42 @@ static int header_parser(httpc_conn_t *httpc, char *buf, size_t buf_len)
 
 httpc_conn_t *http_connection_new(const char *url, esp_tls_cfg_t *tls_cfg)
 {
-    httpc_conn_t *h;
-
-    /* Parse URI */
-    struct http_parser_url u;
-    http_parser_url_init(&u);
-    http_parser_parse_url(url, strlen(url), 0, &u);
-
-    /* Connect to host */
-    struct esp_tls *tls;
-    bool is_tls = is_url_tls(url, &u);
-    tls = esp_tls_conn_new(&url[u.field_data[UF_HOST].off], u.field_data[UF_HOST].len,
-                           get_port(url, &u),
-			   is_tls ? tls_cfg : NULL);
-    if (!tls) {
+    if (!url) {
+        ESP_LOGE(TAG, "url is null. Line = %d", __LINE__);
+        return NULL;
+    }
+    httpc_conn_t *h = (httpc_conn_t *) calloc(1, sizeof(httpc_conn_t));
+    if (!h) {
+        ESP_LOGE(TAG, "Could not allocate httpc_conn_t. Line = %d", __LINE__);
         return NULL;
     }
 
-    h = (httpc_conn_t *)calloc(1, sizeof(httpc_conn_t));
-    if (!h) {
+    /* Parse URI */
+    struct http_parser_url *u = &h->u;
+    http_parser_url_init(u);
+    http_parser_parse_url(url, strlen(url), 0, u);
+
+    /* Connect to host */
+    struct esp_tls *tls;
+    bool is_tls = is_url_tls(url, u);
+
+    tls = esp_tls_conn_new(&url[u->field_data[UF_HOST].off], u->field_data[UF_HOST].len,
+                           get_port(url, u), is_tls ? tls_cfg : NULL);
+    if (!tls) {
+        ESP_LOGE(TAG, "Failed to create a new TLS connection");
         goto error;
     }
     h->tls = tls;
     h->is_tls = is_tls;
 
-    h->host = (char *)calloc(1, u.field_data[UF_HOST].len + 1);
+    h->host = (char *) calloc(1, u->field_data[UF_HOST].len + 1);
     if (!h->host) {
+        ESP_LOGE(TAG, "Could not allocate host. Line = %d", __LINE__);
         goto error;
     }
-    strncpy((char *)h->host, &url[u.field_data[UF_HOST].off], u.field_data[UF_HOST].len);
+    strncpy((char *)h->host, &url[u->field_data[UF_HOST].off], u->field_data[UF_HOST].len);
+
+    h->state = ESP_HTTP_CONNECTION_DONE;
     return h;
 
 error:
@@ -135,8 +172,82 @@ error:
         }
         free(h);
     }
-    esp_tls_conn_delete(tls);
+    if (tls) {
+        esp_tls_conn_delete(tls);
+    }
     return NULL;
+}
+
+int http_connection_new_async(const char *url, esp_tls_cfg_t *tls_cfg, httpc_conn_t **hc)
+{
+    httpc_conn_t *h;
+    int ret;
+
+    if (!url) {
+        ESP_LOGE(TAG, "url is null. Line = %d", __LINE__);
+        return -1;
+    }
+    if (!*hc) {
+        h = (httpc_conn_t *) calloc(1, sizeof(httpc_conn_t));
+        if (!h) {
+            ESP_LOGE(TAG, "Could not allocate httpc_conn_t. Line = %d", __LINE__);
+            return -1;
+        }
+        *hc = h;
+        h->state = ESP_HTTP_INIT;
+        h->is_async = true;
+    } else {
+        h = *hc;
+    }
+
+    struct http_parser_url *u = &h->u;
+
+    switch(h->state) {
+
+    case ESP_HTTP_INIT:
+        /* Parse URI */
+        http_parser_url_init(u);
+        http_parser_parse_url(url, strlen(url), 0, u);
+
+        h->is_tls = is_url_tls(url, u);
+        h->tls = (struct esp_tls *) calloc(1, sizeof (struct esp_tls));
+        if (!h->tls) {
+            break;
+        }
+        h->state = ESP_HTTP_TLS_CONNECT;
+
+    case ESP_HTTP_TLS_CONNECT:
+        /* Create tls connection */
+        ret = esp_tls_conn_new_async(&url[u->field_data[UF_HOST].off], u->field_data[UF_HOST].len,
+                                     get_port(url, u), h->is_tls ? tls_cfg : NULL, h->tls);
+        if (ret == -1) {
+            break;
+        } else if (ret == 0) {
+            return 0;
+        }
+        h->host = (char *) calloc(1, u->field_data[UF_HOST].len + 1);
+        if (!h->host) {
+            ESP_LOGE(TAG, "Could not allocate host. Line = %d", __LINE__);
+            esp_tls_conn_delete(h->tls);
+            break;
+        }
+        memcpy((char *)h->host, &url[u->field_data[UF_HOST].off], u->field_data[UF_HOST].len);
+
+        h->state = ESP_HTTP_CONNECTION_DONE;
+        return 1;
+
+    default:
+        return -1;
+    }
+
+    if (h) {
+        if (h->tls) {
+            free (h->tls);
+        }
+        free(h);
+        *hc = NULL;
+    }
+    return -1;
 }
 
 int http_connection_get_sockfd(httpc_conn_t *http_conn)
@@ -151,6 +262,9 @@ int http_connection_get_sockfd(httpc_conn_t *http_conn)
 
 void http_connection_delete(httpc_conn_t *httpc)
 {
+    if (!httpc) {
+        return;
+    }
     if (httpc->host) {
         free(httpc->host);
     }
@@ -198,7 +312,7 @@ int http_request_send_custom_hdr(httpc_conn_t *httpc, const char *user_hdr)
     if (esp_tls_conn_write(httpc->tls, user_hdr, strlen(user_hdr)) < 0) {
         return -1;
     }
-    httpc->request.status = ESP_HTTP_REQ_HDR_SENT;
+    httpc->state = ESP_HTTP_REQ_HDR_SENT;
     return 0;
 #undef GET_DATA_TEMPLATE
 #undef POST_DATA_TEMPLATE
@@ -264,13 +378,13 @@ static int http_request_send_our_hdr(httpc_conn_t *httpc, size_t data_len)
         return -1;
     }
     free(hdr);
-    httpc->request.status = ESP_HTTP_REQ_HDR_SENT;
+    httpc->state = ESP_HTTP_REQ_HDR_SENT;
     return 0;
 }
 
 int http_request_send(httpc_conn_t *httpc, const char *data, size_t data_len)
 {
-    if (httpc->request.status < ESP_HTTP_REQ_HDR_SENT) {
+    if (httpc->state < ESP_HTTP_REQ_HDR_SENT) {
         if (http_request_send_our_hdr(httpc, data_len) != 0) {
             return -1;
         }
@@ -411,7 +525,7 @@ static int http_hdr_complete(http_parser *parser)
 {
     httpc_conn_t *h = parser->data;
 
-    h->request.status = ESP_HTTP_RESP_HDR_RECEIVED;
+    h->state = ESP_HTTP_RESP_HDR_RECEIVED;
     h->request.content_length = h->request.parser.content_length;
     ESP_LOGD(TAG, "on-hdr-complete: resp_code %d  resp_len %zu\n",
              http_response_get_code(h),
@@ -424,11 +538,11 @@ static int http_hdr_complete(http_parser *parser)
 static int http_message_complete(http_parser *parser)
 {
     httpc_conn_t *h = parser->data;
-    h->request.status = ESP_HTTP_RESP_BDY_RECEIVED;
+    h->state = ESP_HTTP_RESP_BDY_RECEIVED;
     return 0;
 }
 
-static char *http_get_correct_path(const char *url)
+static char *http_get_correct_path(const char *url, struct http_parser_url *u)
 {
     if (url[0] == '/') {
         /* This is the correct path */
@@ -437,19 +551,18 @@ static char *http_get_correct_path(const char *url)
         /* It appears that the user passed the entire URL including the
          * hostname. Get the path component.
          */
-        struct http_parser_url u;
-        http_parser_url_init(&u);
-        http_parser_parse_url(url, strlen(url), 0, &u);
-        if (u.field_data[UF_PATH].len) {
+        http_parser_url_init(u);
+        http_parser_parse_url(url, strlen(url), 0, u);
+        if (u->field_data[UF_PATH].len) {
 	    /* The path may be followed by some URL parameters which
 	     * also need to be sent out
 	     */
-            char *path = calloc(1, strlen(url) - u.field_data[UF_PATH].off + 1);
+            char *path = calloc(1, strlen(url) - u->field_data[UF_PATH].off + 1);
             if (!path) {
                 return NULL;
             }
-            strncpy(path, &url[u.field_data[UF_PATH].off],
-                    strlen(url) - u.field_data[UF_PATH].off + 1);
+            strncpy(path, &url[u->field_data[UF_PATH].off],
+                    strlen(url) - u->field_data[UF_PATH].off + 1);
             return path;
         } else {
             /* No path, implies '/' */
@@ -460,13 +573,18 @@ static char *http_get_correct_path(const char *url)
 
 int http_request_new(httpc_conn_t *httpc, httpc_ops_t op, const char *url)
 {
-    if (httpc->request.status != ESP_HTTP_REQ_NEW) {
+    if (httpc->state < ESP_HTTP_CONNECTION_DONE) {
+        ESP_LOGE(TAG, "Connection to host not done yet!");
+        return -1;
+    }
+
+    if (httpc->state > ESP_HTTP_REQ_NEW) {
         /* There may be left-over data in here from the previous request on
          * the same socket, flush it out so that the next request works
          * properly.
          */
         char buf[50];
-        while (httpc->request.status < ESP_HTTP_RESP_BDY_RECEIVED) {
+        while (httpc->state < ESP_HTTP_RESP_BDY_RECEIVED) {
             int status = http_response_read_and_parse(httpc, buf, sizeof(buf), true);
             if (status == -EAGAIN) {
                 continue;
@@ -478,12 +596,12 @@ int http_request_new(httpc_conn_t *httpc, httpc_ops_t op, const char *url)
     }
     memset(&httpc->request, 0, sizeof(httpc->request));
     httpc->request.op = op;
-    httpc->request.url = http_get_correct_path(url);
+    httpc->request.url = http_get_correct_path(url, &httpc->u);
     if (! httpc->request.url) {
         return -1;
     }
     httpc->request.content_type = DEFAULT_CONTENT_TYPE;
-    httpc->request.status = ESP_HTTP_REQ_NEW;
+    httpc->state = ESP_HTTP_REQ_NEW;
     http_parser_init(&httpc->request.parser, HTTP_RESPONSE);
     httpc->request.parser.data = httpc;
     httpc->request.parser_settings.on_headers_complete = http_hdr_complete;
@@ -494,30 +612,20 @@ int http_request_new(httpc_conn_t *httpc, httpc_ops_t op, const char *url)
     return 0;
 }
 
-httpc_conn_t *http_renew_session(httpc_conn_t *httpc, httpc_ops_t op, const char *url)
+/**
+ * Check if renew session needed
+ */
+bool http_connection_new_needed(httpc_conn_t *httpc, const char *url)
 {
     /* Parse URI */
     struct http_parser_url u = {0};
     http_parser_parse_url(url, strlen(url), 0, &u);
 
-    http_request_delete(httpc); /* Delete previous request */
-
     if (strncmp(httpc->host, url + u.field_data[UF_HOST].off, u.field_data[UF_HOST].len) ||
             (httpc->is_tls != is_url_tls(url, &u))) { /* We need a new connection. */
-        http_connection_delete(httpc);
-        esp_tls_cfg_t tls_cfg = {
-            .use_global_ca_store = true,
-        };
-        httpc = http_connection_new(url, &tls_cfg);
-        if (!httpc) {
-            return NULL;
-        }
+        return true;
     }
-    if(http_request_new(httpc, op, url) < 0) {
-        http_connection_delete(httpc);
-        return NULL;
-    }
-    return httpc;
+    return false;
 }
 
 void http_request_delete(httpc_conn_t *httpc)
@@ -543,10 +651,10 @@ int http_response_recv(httpc_conn_t *httpc, char *buf, size_t buf_len)
      * after sending the request. If the headers aren't parsed, we need to parse
      * them in here.
      */
-    if (httpc->request.status < ESP_HTTP_RESP_STARTED) {
-        httpc->request.status = ESP_HTTP_RESP_STARTED;
+    if (httpc->state < ESP_HTTP_RESP_STARTED) {
+        httpc->state = ESP_HTTP_RESP_STARTED;
     }
-    if ( httpc->request.status < ESP_HTTP_RESP_HDR_RECEIVED ) {
+    if ( httpc->state < ESP_HTTP_RESP_HDR_RECEIVED ) {
         int status = header_parser(httpc, buf, buf_len);
         if (status < 0) {
             return status;
@@ -581,7 +689,7 @@ int http_response_recv(httpc_conn_t *httpc, char *buf, size_t buf_len)
         return copy_len;
     }
     while (1) {
-        if (httpc->request.status < ESP_HTTP_RESP_BDY_RECEIVED) {
+        if (httpc->state < ESP_HTTP_RESP_BDY_RECEIVED) {
             int status  = http_response_read_and_parse(httpc, buf, buf_len, false);
             if (status < 0) {
                 return status;
@@ -606,8 +714,8 @@ int http_response_recv(httpc_conn_t *httpc, char *buf, size_t buf_len)
 
 int http_header_fetch(httpc_conn_t *httpc)
 {
-    if (httpc->request.status < ESP_HTTP_RESP_STARTED) {
-        httpc->request.status = ESP_HTTP_RESP_STARTED;
+    if (httpc->state < ESP_HTTP_RESP_STARTED) {
+        httpc->state = ESP_HTTP_RESP_STARTED;
         httpc->request.hdr_overflow_buf = (char *)malloc(HTTPC_BUF_SIZE);
         int status =  header_parser(httpc, httpc->request.hdr_overflow_buf, HTTPC_BUF_SIZE);
         if (status < 0) {

@@ -5,12 +5,11 @@
 #define _ALEXA_H_
 
 #include "voice_assistant.h"
+#include "auth_delegate.h"
 
 /** The Alexa Configuration Structure
  */
 typedef struct {
-    /** Configuration for the Auth Delegate */
-    auth_delegate_config_t auth_delegate;
     va_playback_config_t va_playback;
     char *device_serial_num;
     char *product_id;
@@ -40,7 +39,16 @@ int alexa_bluetooth_init();
  * Enabling this tone would increase size of binary by around 356 KB.
  */
 void alexa_tone_enable_larger_tones();
+
+/** Change Alexa Language.
+ *
+ * This API can be used to change the default locale i.e language and/or accent for Alexa. The supported locales can be found here: https://developer.amazon.com/docs/alexa-voice-service/settings.html
+ */
+void alexa_change_locale(const char *locale);
+
 void alexa_auth_delegate_signin(auth_delegate_config_t *cfg);
 void alexa_auth_delegate_signout();
+void alexa_signin_handler(const char *client_id, const char *refresh_token);
+void alexa_signout_handler();
 
 #endif /*_ALEXA_H_ */

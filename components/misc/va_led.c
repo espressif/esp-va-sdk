@@ -94,7 +94,7 @@ static void va_led_send_vl(va_led_specs_t *va_led_v, uint8_t num)
 {
     xSemaphoreTake(led_st.va_led_tim_sema, portMAX_DELAY);
     va_led_set_pwm((uint32_t *)va_led_v[num].va_led_val);
-    esp_timer_start_once(led_st.esp_delay_timer_hdl, (va_led_v->va_led_delay * 1000));
+    esp_timer_start_once(led_st.esp_delay_timer_hdl, (va_led_v[num].va_led_delay * 1000));
 }
 
 static void va_led_set_state(size_t sz, const va_led_specs_t *va_led_conf)
@@ -158,7 +158,7 @@ static void va_led_task(void *arg)
                     if (!(va_led_con[VA_LED_BOOTUP_1].va_led_state_st->loop_en)) {
                         va_led_set_state(va_led_con[VA_LED_BOOTUP_1].va_led_state_sz, va_led_con[VA_LED_BOOTUP_1].va_led_state_st);  //bootup 1
                     }
-                    while (!(va_boot_is_finish()) && !(va_led_priority[3].va_led_current_state == LED_RESET)) {
+                    while (!(va_boot_is_finish()) && !(va_led_priority[3].va_led_current_state == LED_OFF)) {
                         va_led_send_vl(va_led_con[VA_LED_BOOTUP_2].va_led_state_st, counter);
                         counter = (counter + 1) % va_led_con[VA_LED_BOOTUP_2].va_led_state_sz;
                     }
@@ -255,10 +255,15 @@ static void va_led_task(void *arg)
                     counter = (counter + 1) % va_led_con[VA_LED_FACTORY_RESET].va_led_state_sz;
                     va_led_tick = 0;
                 break;
+                case LED_OTA :
+                    va_led_set_state(va_led_con[VA_LED_OTA].va_led_state_sz, va_led_con[VA_LED_OTA].va_led_state_st);  //led off
+                    va_led_tick = portMAX_DELAY;
+                break;
                 case LED_OFF :
                     if (!(va_led_con[VA_LED_OFF].va_led_state_st->loop_en)) {
                         va_led_set_state(va_led_con[VA_LED_OFF].va_led_state_sz, va_led_con[VA_LED_OFF].va_led_state_st);  //led off
                     }
+                    va_led_tick = portMAX_DELAY;
                 break;
                 default :
                     va_led_tick = portMAX_DELAY;
@@ -326,12 +331,6 @@ esp_err_t va_led_init(va_led_config_t va_led_conf[VA_LED_PATTERN_MAX])
         ESP_LOGE(TAG, "Could not create led pattern semaphore");
         return ESP_FAIL;
     }
-    led_st.va_led_task_handle = xTaskCreateStatic(va_led_task, "ui-led-thread", VA_LED_TASK_STACK_SZ, (void *)va_led_conf,
-                                CONFIG_ESP32_PTHREAD_TASK_PRIO_DEFAULT, va_led_task_stack, &va_led_buf);
-    if (led_st.va_led_task_handle == NULL) {
-        ESP_LOGE(TAG, "Could not create ui led task");
-        return ESP_FAIL;
-    }
     ret = esp_timer_init();
     if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
         ESP_LOGE(TAG, "Could not create esp timer");
@@ -344,6 +343,12 @@ esp_err_t va_led_init(va_led_config_t va_led_conf[VA_LED_PATTERN_MAX])
     };
     if (esp_timer_create(&va_led_timer_arg, &led_st.esp_delay_timer_hdl) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to create esp timer");
+        return ESP_FAIL;
+    }
+    led_st.va_led_task_handle = xTaskCreateStatic(va_led_task, "ui-led-thread", VA_LED_TASK_STACK_SZ, (void *)va_led_conf,
+                                CONFIG_ESP32_PTHREAD_TASK_PRIO_DEFAULT, va_led_task_stack, &va_led_buf);
+    if (led_st.va_led_task_handle == NULL) {
+        ESP_LOGE(TAG, "Could not create ui led task");
         return ESP_FAIL;
     }
     return ESP_OK;

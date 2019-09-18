@@ -52,6 +52,7 @@ enum dialogflow_conversation_type dialogflow_app_response_data(Google__Cloud__Di
 {
     int i;
     bool end_interaction = false;
+    /* This will set the default as mic start again if the query is not complete. You can change this to DIALOGFLOW_CONVERSATION_STOP if you don't want to start the mic automatically (eg. in case of only text-queries.). */
     enum dialogflow_conversation_type dialogflow_conversation_type = DIALOGFLOW_CONVERSATION_CONTINUE;
     printf("The query text is: %s\n", response->query_result->query_text);
     printf("The fulfillment text is: %s\n", response->query_result->fulfillment_text);

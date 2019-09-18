@@ -8,7 +8,7 @@
 #include <alerts.h>
 #include <tone.h>
 #include "va_dsp.h"
-#include "avs_nvs_utils.h"
+#include "va_nvs_utils.h"
 #include "va_led.h"
 
 
@@ -195,25 +195,20 @@ static void va_button_adc_task(void *arg)
             if (va_button_wifi_reset_cb == NULL) {
                 ESP_LOGE(TAG, "No callback set for wifi reset");
             } else {
-                (*va_button_wifi_reset_cb)(NULL);
-                media_hal_powerdown(media_hal_get_handle());
-                va_led_set(LED_RESET);
-                vTaskDelay(3333 / portTICK_RATE_MS);
+                /* Do not set any led here. Instead set the Factory reset led when starting provisioning after restart. */
                 va_led_set(LED_OFF);
-                vTaskDelay(233/portTICK_RATE_MS);
+                va_reset();
+                (*va_button_wifi_reset_cb)(NULL);
                 va_button_is_wifi_rst = true;   //Since non-blocking as of now
             }
             va_button_wifi_rst_en = false;
         }
         if(va_button_factory_rst_en) {
             va_button_is_factory_rst = true;   //Lets keep for it, can be removed as this is a blocking call
-            va_led_set(LED_RESET);
-            vTaskDelay(3333 / portTICK_RATE_MS);
+            /* Do not set any led here. Instead set the Factory reset led when starting provisioning after restart. */
             va_led_set(LED_OFF);
-            vTaskDelay(233/portTICK_RATE_MS);
-            avs_nvs_flash_erase();
-            va_dsp_reset();
-            media_hal_deinit(media_hal_get_handle());
+            va_nvs_flash_erase();
+            va_reset();
             esp_restart();
             va_button_factory_rst_en = false;
         }
@@ -293,11 +288,10 @@ static void va_button_gpio_task(void *arg)
             mute_btn_press_en = false;
         }
         if(va_button_factory_rst_en) {
-            va_led_set(LED_RESET);
-            vTaskDelay(3333 / portTICK_RATE_MS);
+            /* Do not set any led here. Instead set the Factory reset led when starting provisioning after restart. */
             va_led_set(LED_OFF);
-            vTaskDelay(233/portTICK_RATE_MS);
-            avs_nvs_flash_erase();
+            vTaskDelay(1000 / portTICK_RATE_MS);
+            va_nvs_flash_erase();
             va_dsp_reset();
             media_hal_deinit(media_hal_get_handle());
             esp_restart();
@@ -314,6 +308,25 @@ void va_button_register_wifi_reset_cb(va_button_wifi_reset_cb_t wifi_reset_cb)
 esp_err_t va_button_init(const button_cfg_t *button_cfg, int (*button_event_cb)(int))
 {
     button_st.but_cfg = *button_cfg;
+
+    esp_timer_init();
+    esp_timer_create_args_t timer_arg = {
+        .callback = va_button_factory_reset_timer_cb,
+        .arg = NULL,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "va button factory reset timer",
+    };
+    if (esp_timer_create(&timer_arg, &button_st.esp_timer_handler_f) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to create esp timer for reset-to-factory button");
+        return ESP_FAIL;
+    }
+    timer_arg.callback = va_button_wifi_reset_timer_cb;
+    timer_arg.name = "va button wifi reset timer";
+    if (esp_timer_create(&timer_arg, &button_st.esp_timer_handler_w) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to create esp timer for reset-to-wifi button");
+        return ESP_FAIL;
+    }
+
     if(button_st.but_cfg.is_adc) {
         va_button_adc_init(button_st.but_cfg.va_button_adc_ch_num);
         if(button_st.but_cfg.va_button_adc_val[VA_BUTTON_MIC_MUTE] == -1) {
@@ -344,24 +357,5 @@ esp_err_t va_button_init(const button_cfg_t *button_cfg, int (*button_event_cb)(
             return ESP_FAIL;
         }
     }
-
-    esp_timer_init();
-    esp_timer_create_args_t timer_arg = {
-        .callback = va_button_factory_reset_timer_cb,
-        .arg = NULL,
-        .dispatch_method = ESP_TIMER_TASK,
-        .name = "va button factory reset timer",
-    };
-    if (esp_timer_create(&timer_arg, &button_st.esp_timer_handler_f) != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to create esp timer for reset-to-factory button");
-        return ESP_FAIL;
-    }
-    timer_arg.callback = va_button_wifi_reset_timer_cb;
-    timer_arg.name = "va button wifi reset timer";
-    if (esp_timer_create(&timer_arg, &button_st.esp_timer_handler_w) != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to create esp timer for reset-to-wifi button");
-        return ESP_FAIL;
-    }
-    
     return ESP_OK;
 }

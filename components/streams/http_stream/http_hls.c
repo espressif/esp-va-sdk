@@ -24,7 +24,6 @@
 
 #include <esp_err.h>
 #include <esp_log.h>
-#include <http_playback_stream.h>
 #include <http_hls.h>
 #include <m3u8_parser.h>
 #include <pls_parser.h>

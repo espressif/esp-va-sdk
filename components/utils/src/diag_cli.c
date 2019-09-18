@@ -30,9 +30,22 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <esp_audio_mem.h>
+#include <esp_timer.h>
+
 #include <string.h>
 
 static const char *TAG = "[diag_cli]";
+
+static int up_time_cli_handler(int argc, char *argv[])
+{
+    /* Just to go to the next line */
+    printf("\n");
+
+    /* print up time */
+    printf("%lld milli seconds\n", esp_timer_get_time() / 1000);
+    return 0;
+}
+
 static int task_dump_cli_handler(int argc, char *argv[])
 {
     int num_of_tasks = uxTaskGetNumberOfTasks();
@@ -165,6 +178,11 @@ static int heap_trace_cli_handler(int argc, char *argv[])
 }
 
 static esp_console_cmd_t diag_cmds[] = {
+    {
+        .command = "up-time",
+        .help = "Device up time in milliseconds precision",
+        .func = up_time_cli_handler,
+    },
     {
         .command = "mem-dump",
         .help = "",
