@@ -22,12 +22,8 @@
  *
  */
 
-#include <stdlib.h>
-#include <stdint.h>
-#include <stdbool.h>
-#include <string.h>
 #include <sdkconfig.h>
-#include <esp_heap_caps.h>
+#include <esp_audio_mem.h>
 
 void *esp_audio_mem_malloc(int size)
 {

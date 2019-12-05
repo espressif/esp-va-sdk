@@ -23,8 +23,7 @@
 #include <media_hal.h>
 #include <tone.h>
 #include <avs_config.h>
-#include <auth_delegate.h>
-#include "va_dsp.h"
+#include <speech_recognizer.h>
 #include "va_board.h"
 #include "app_auth.h"
 #include "app_wifi.h"
@@ -121,6 +120,7 @@ void app_main()
         ESP_LOGE(TAG, "Failed to alloc voice assistant config");
         abort();
     }
+    va_cfg->product_id = CONFIG_ALEXA_PRODUCT_ID;
 
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES) {
@@ -147,7 +147,7 @@ void app_main()
     ESP_ERROR_CHECK(esp_event_loop_init(event_handler, NULL) );
 
     printf("\r");       // To remove a garbage print ">>"
-    auth_delegate_init(alexa_signin_handler, alexa_signout_handler);    // This is specific to the sdk. Do not modify.
+    alexa_auth_delegate_init(NULL, NULL);
     bool provisioned = false;
     if (conn_mgr_prov_is_provisioned(&provisioned) != ESP_OK) {
         ESP_LOGE(TAG, "Error getting device provisioning state");
@@ -196,25 +196,25 @@ void app_main()
 
     ret = alexa_local_config_start(va_cfg, service_name);
     if (ret != ESP_OK) {
-	ESP_LOGE(TAG, "Failed to start local SSDP instance. Some features might not work.");
+        ESP_LOGE(TAG, "Failed to start local SSDP instance. Some features might not work.");
     }
-    ret = alexa_init(va_cfg);
+
 #ifdef ALEXA_BT
-    alexa_bluetooth_init();
+    alexa_bt_a2dp_sink_init();
 #endif
+    ret = alexa_init(va_cfg);
 
     if (ret != ESP_OK) {
         while(1) vTaskDelay(2);
     }
 
     /* This is a blocking call */
-    va_dsp_init();
+    va_dsp_init(speech_recognizer_recognize, speech_recognizer_record);
 
 #ifdef CONFIG_ALEXA_ENABLE_OTA
     /* Doing OTA init after full alexa boot-up. */
     app_ota_init();
 #endif
-
     /* This is only supported with minimum flash size of 8MB. */
     alexa_tone_enable_larger_tones();
 

@@ -19,8 +19,8 @@
 #include <string.h>
 #include "driver/gpio.h"
 #include "esp_log.h"
-#include "es8388.h"
 #include <media_hal.h>
+#include <media_hal_codec_init.h>
 
 #define HAL_TAG "MEDIA_HAL"
 
@@ -41,45 +41,22 @@
         ESP_LOGE(HAL_TAG, format, ##__VA_ARGS__); \
         return b;\
     }
+
 uint8_t media_hal_port_num;
-static media_hal_t *media_hal_handle;
-static bool isfirst = true;
+static media_hal_t *media_hal_handle = NULL;
 
-static uint8_t volume_prv;
-
-static void media_hal_func_init(media_hal_t* media_hal)
-{
-    media_hal->audio_codec_initialize = es8388_init;
-    media_hal->audio_codec_deinitialize = es8388_deinit;
-    media_hal->audio_codec_set_state = es8388_set_state;
-    media_hal->audio_codec_set_i2s_clk = es8388_set_i2s_clk;
-    media_hal->audio_codec_config_format = es8388_config_format;
-    media_hal->audio_codec_control_volume = es8388_control_volume;
-    media_hal->audio_codec_get_volume = es8388_get_volume;
-    media_hal->audio_codec_set_mute = es8388_set_mute;
-    media_hal->audio_codec_powerup = es8388_powerup;
-    media_hal->audio_codec_powerdown = es8388_powerdown;
-}
+static uint8_t volume_prv; //This currently is needed due to bt case.
 
 media_hal_t* media_hal_init(media_hal_config_t *media_hal_conf)
 {
-    if (isfirst) {
-        esp_err_t ret  = 0;
+    if (!media_hal_handle) {
+        //esp_err_t ret  = 0;
         media_hal_t *media_hal = (media_hal_t *) calloc(1, sizeof(media_hal_t));
         media_hal->media_hal_lock = mutex_create();
         assert(media_hal->media_hal_lock);
-        media_hal_func_init(media_hal);
-        mutex_lock(media_hal->media_hal_lock);
-        ret  = media_hal->audio_codec_initialize(media_hal_conf->op_mode, media_hal_conf->adc_input, media_hal_conf->dac_output, media_hal_conf->port_num);
-        ret |= media_hal->audio_codec_config_format(media_hal_conf->codec_mode, 0);
-        ret |= media_hal->audio_codec_set_i2s_clk(media_hal_conf->codec_mode, media_hal_conf->bit_length);
-        ret |= media_hal->audio_codec_control_volume(MEDIA_HAL_VOL_DEFAULT);
-        // ret |= media_hal->audio_codec_powerdown();
-        mutex_unlock(media_hal->media_hal_lock);
+        media_hal_codec_init(media_hal, media_hal_conf);
         volume_prv = MEDIA_HAL_VOL_DEFAULT;
-
         media_hal_handle = media_hal;
-        isfirst = false;
     } else {
         ESP_LOGW(HAL_TAG, "Codec already initialized, returning initialized handle");
     }
@@ -88,12 +65,10 @@ media_hal_t* media_hal_init(media_hal_config_t *media_hal_conf)
 
 media_hal_t* media_hal_get_handle()
 {
-    if (!isfirst) {
-        return media_hal_handle;
-    } else {
+    if (!media_hal_handle) {
         ESP_LOGE(HAL_TAG, "Media Hal not initialized");
-        return NULL;
     }
+    return media_hal_handle;
 }
 
 esp_err_t media_hal_deinit(media_hal_t* media_hal)
@@ -106,6 +81,7 @@ esp_err_t media_hal_deinit(media_hal_t* media_hal)
     ret = media_hal->audio_codec_deinitialize(media_hal_port_num);
     media_hal->media_hal_lock = NULL;
     free(media_hal);
+    media_hal_handle = NULL;
     return ret;
 }
 
@@ -122,25 +98,104 @@ esp_err_t media_hal_set_state(media_hal_t* media_hal, media_hal_codec_mode_t mod
     return ret;
 }
 
+/**
+ * @brief Register volume change callback
+ *
+ * @param media_hal reference function pointer for selected audio codec
+ * @param callback volume change callback function to register
+ *
+ * @return     int, 0--success, others--fail
+ */
+esp_err_t media_hal_register_volume_change_cb(media_hal_t *media_hal, void (*callback) (int volume))
+{
+    int pos = 0;
+    while (pos < VOLUME_CHANGE_CB_MAX) {
+        if (media_hal->volume_change_notify_cb[pos]) {
+            if (media_hal->volume_change_notify_cb[pos] == callback) {
+                ESP_LOGW(HAL_TAG, "Already registered");
+                return ESP_FAIL;
+            }
+            pos++;
+        } else {
+            break;
+        }
+    }
+
+    if (pos < VOLUME_CHANGE_CB_MAX) {
+        media_hal->volume_change_notify_cb[pos] = callback;
+        return ESP_OK;
+    }
+
+    ESP_LOGW(HAL_TAG, "CB array is full!");
+    return ESP_FAIL;
+}
+
+/**
+ * @brief Deregister volume change callback
+ *
+ * @param media_hal reference function pointer for selected audio codec
+ * @param callback volume change callback function to deregister
+ *
+ * @return     int, 0--success, others--fail
+ */
+esp_err_t media_hal_deregister_volume_change_cb(media_hal_t *media_hal, void (*callback) (int volume))
+{
+    int pos = 0;
+    while (pos < VOLUME_CHANGE_CB_MAX) {
+        if (media_hal->volume_change_notify_cb[pos]) {
+            if (media_hal->volume_change_notify_cb[pos] == callback) {
+                media_hal->volume_change_notify_cb[pos] = NULL;
+                break;
+            }
+        }
+        pos++;
+    }
+
+    while (pos < VOLUME_CHANGE_CB_MAX - 1) {
+        media_hal->volume_change_notify_cb[pos] = media_hal->volume_change_notify_cb[pos + 1];
+        pos++;
+    }
+    return ESP_OK;
+}
+
+static esp_err_t media_hal_notify_volume_change(media_hal_t *media_hal, int volume)
+{
+    for (int i = 0; i < VOLUME_CHANGE_CB_MAX; i++) {
+        if (media_hal->volume_change_notify_cb[i]) {
+            media_hal->volume_change_notify_cb[i] (volume);
+        } else {
+            return ESP_OK;
+        }
+    }
+    return ESP_OK;
+}
+
 esp_err_t media_hal_control_volume(media_hal_t* media_hal, uint8_t volume)
 {
+    media_hal_notify_volume_change(media_hal, volume);
     if (!media_hal) {
         return ESP_FAIL;
     }
+    volume_prv = volume;
     esp_err_t ret;
     mutex_lock(media_hal->media_hal_lock);
     if (volume == 0) {
-        ret = es8388_set_mute(1);
+        ret = media_hal->audio_codec_set_mute(true);
     } else {
         ret = media_hal->audio_codec_control_volume(volume);
     }
-    volume_prv = volume;
     mutex_unlock(media_hal->media_hal_lock);
     return ret;
 }
 
 esp_err_t media_hal_set_mute(media_hal_t* media_hal, bool mute)
 {
+    if (mute) {
+        media_hal_notify_volume_change(media_hal, 0);
+    } else {
+        media_hal_notify_volume_change(media_hal, volume_prv);
+    }
+
     if (!media_hal) {
         return ESP_FAIL;
     }
@@ -159,8 +214,8 @@ esp_err_t media_hal_get_volume(media_hal_t* media_hal, uint8_t *volume)
     esp_err_t ret;
     MEDIA_HAL_CHECK_NULL(volume, "Get volume para is null", -1);
     mutex_lock(media_hal->media_hal_lock);
-    //ret = media_hal->audio_codec_get_volume(volume);
     *volume = volume_prv;
+    //ret = media_hal->audio_codec_get_volume(volume);
     mutex_unlock(media_hal->media_hal_lock);
     return ret;
 }

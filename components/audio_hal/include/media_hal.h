@@ -133,18 +133,19 @@ typedef struct {
     int port_num;
 } media_hal_config_t;
 
-
+#define VOLUME_CHANGE_CB_MAX 5
 typedef  struct {
-    esp_err_t ( *audio_codec_initialize)(media_hal_op_mode_t media_hal_op_mode, media_hal_adc_input_t media_hal_adc_input, media_hal_dac_output_t media_hal_dac_output, int port_num);
-    esp_err_t ( *audio_codec_deinitialize)(int port_num);
-    esp_err_t ( *audio_codec_set_state)(media_hal_codec_mode_t mode, media_hal_sel_state_t media_hal_state);
-    esp_err_t ( *audio_codec_set_i2s_clk)(media_hal_codec_mode_t mode, media_hal_bit_length_t media_hal_bit_length);
-    esp_err_t ( *audio_codec_config_format)(media_hal_codec_mode_t mode, media_hal_format_t fmt);
-    esp_err_t ( *audio_codec_control_volume)(uint8_t volume);
-    esp_err_t ( *audio_codec_get_volume)(uint8_t *volume);
-    esp_err_t ( *audio_codec_set_mute)(bool mute);
-    esp_err_t ( *audio_codec_powerup)();
-    esp_err_t ( *audio_codec_powerdown)();
+    esp_err_t (*audio_codec_initialize) (media_hal_config_t *media_hal_conf);
+    esp_err_t (*audio_codec_deinitialize) (int port_num);
+    esp_err_t (*audio_codec_set_state) (media_hal_codec_mode_t mode, media_hal_sel_state_t media_hal_state);
+    esp_err_t (*audio_codec_set_i2s_clk) (media_hal_codec_mode_t mode, media_hal_bit_length_t media_hal_bit_length);
+    esp_err_t (*audio_codec_config_format) (media_hal_codec_mode_t mode, media_hal_format_t fmt);
+    esp_err_t (*audio_codec_control_volume) (uint8_t volume);
+    esp_err_t (*audio_codec_get_volume) (uint8_t *volume);
+    esp_err_t (*audio_codec_set_mute) (bool mute);
+    esp_err_t (*audio_codec_powerup) ();
+    esp_err_t (*audio_codec_powerdown) ();
+    void (*volume_change_notify_cb[VOLUME_CHANGE_CB_MAX]) (int volume);
     xSemaphoreHandle media_hal_lock;
 } media_hal_t;
 
@@ -160,7 +161,7 @@ media_hal_t* media_hal_init(media_hal_config_t *media_hal_conf);
 /**
  * @brief Returns first initialized media_hal_t structure
  *
- * @praram none 
+ * @praram none
  *
  * @return  media_hal_t* - success, otherwise NULL
  */
@@ -186,6 +187,26 @@ esp_err_t media_hal_deinit(media_hal_t* media_hal);
  * @return     int, 0--success, others--fail
  */
 esp_err_t media_hal_set_state(media_hal_t* media_hal, media_hal_codec_mode_t mode, media_hal_sel_state_t media_hal_state);
+
+/**
+ * @brief Register volume change callback
+ *
+ * @param media_hal reference function pointer for selected audio codec
+ * @param callback volume change callback function to register
+ *
+ * @return     int, 0--success, others--fail
+ */
+esp_err_t media_hal_register_volume_change_cb(media_hal_t *media_hal, void (*callback) (int volume));
+
+/**
+ * @brief Deregister volume change callback
+ *
+ * @param media_hal reference function pointer for selected audio codec
+ * @param callback volume change callback function to deregister
+ *
+ * @return     int, 0--success, others--fail
+ */
+esp_err_t media_hal_deregister_volume_change_cb(media_hal_t *media_hal, void (*callback) (int volume));
 
 /**
  * @brief Set voice volume.

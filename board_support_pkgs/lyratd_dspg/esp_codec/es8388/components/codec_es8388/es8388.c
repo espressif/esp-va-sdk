@@ -54,12 +54,12 @@ static esp_err_t audio_codec_i2c_init(int i2c_master_port)
 {
     int res;
     i2c_config_t pf_i2c_pin = {0};
-    
+
     res = audio_board_i2c_pin_config(i2c_master_port, &pf_i2c_pin);
 
-    pf_i2c_pin.mode = I2C_MODE_MASTER;  
+    pf_i2c_pin.mode = I2C_MODE_MASTER;
     pf_i2c_pin.master.clk_speed = ES8388_I2C_MASTER_SPEED;
-    
+
     res |= i2c_param_config(i2c_master_port, &pf_i2c_pin);
     res |= i2c_driver_install(i2c_master_port, pf_i2c_pin.mode, 0, 0, 0);
     return res;
@@ -149,7 +149,7 @@ static esp_err_t es8388_set_adc_dac_volume(media_hal_codec_mode_t mode, float vo
             volume = 0;
     }
     vol = (uint8_t) ((-1) * (volume * 2));
-    
+
     if (mode == MEDIA_HAL_CODEC_MODE_ENCODE || mode == MEDIA_HAL_CODEC_MODE_BOTH) {
         res  = es8388_write_reg(ES8388_ADDR, ES8388_ADCCONTROL8, vol);
         res |= es8388_write_reg(ES8388_ADDR, ES8388_ADCCONTROL9, vol);  //ADC Right Volume=0db
@@ -244,8 +244,13 @@ esp_err_t es8388_powerdown()
     return ret;
 }
 
-esp_err_t es8388_init(media_hal_op_mode_t es8388_mode, media_hal_adc_input_t es8388_adc_input, media_hal_dac_output_t es8388_dac_output, int port_num)
+esp_err_t es8388_init(media_hal_config_t *media_hal_conf)
 {
+    media_hal_op_mode_t es8388_mode = media_hal_conf->op_mode;
+    media_hal_adc_input_t es8388_adc_input = media_hal_conf->adc_input;
+    media_hal_dac_output_t es8388_dac_output = media_hal_conf->dac_output;
+    int port_num = media_hal_conf->port_num;
+
     esp_err_t res;
 
     audio_codec_i2c_init(port_num);   //set i2c pin and i2c clock frequency for esp32
@@ -381,72 +386,32 @@ esp_err_t es8388_set_mute(bool bmute)
     return res;
 }
 
-esp_err_t es8388_set_bits_per_sample(media_hal_codec_mode_t mode, media_hal_bit_length_t bits_per_sample)
+/**
+ * @brief Configure ES8388 data sample bits
+ *
+ * @param mode:             set ADC or DAC or all
+ * @param bitPerSample:   see BitsLength
+ *
+ * @return
+ *     - (-1) Parameter error
+ *     - (0)   Success
+ */
+int es8388_set_bits_per_sample(es_module_t mode, es_bits_length_t bits_length)
 {
-    esp_err_t res = 0;
+    int res = 0;
     uint8_t reg = 0;
-    uint8_t bits = 0;
-    if(mode == MEDIA_HAL_CODEC_MODE_ENCODE || mode == MEDIA_HAL_CODEC_MODE_BOTH) {
+    int bits = (int) bits_length;
+
+    if (mode == ES_MODULE_ADC || mode == ES_MODULE_ADC_DAC) {
         res = es8388_read_reg(ES8388_ADCCONTROL4, &reg);
         reg = reg & 0xe3;
-        switch(bits_per_sample) {
-            case MEDIA_HAL_BIT_LENGTH_8BITS:
-                break;
-            case MEDIA_HAL_BIT_LENGTH_16BITS:
-                bits = 0x03;
-                res |=  es8388_write_reg(ES8388_ADDR, ES8388_ADCCONTROL4, reg | (bits << 2));
-                break;
-            case MEDIA_HAL_BIT_LENGTH_18BITS:
-                bits = 0x02;
-                res |=  es8388_write_reg(ES8388_ADDR, ES8388_ADCCONTROL4, reg | (bits << 2));
-                break;
-            case MEDIA_HAL_BIT_LENGTH_20BITS:
-                bits = 0x01;
-                res |=  es8388_write_reg(ES8388_ADDR, ES8388_ADCCONTROL4, reg | (bits << 2));
-                break;
-            case MEDIA_HAL_BIT_LENGTH_24BITS:
-                bits = 0x00;
-                res |=  es8388_write_reg(ES8388_ADDR, ES8388_ADCCONTROL4, reg | (bits << 2));
-                break;
-            case MEDIA_HAL_BIT_LENGTH_32BITS:
-                bits = 0x04;
-                res |=  es8388_write_reg(ES8388_ADDR, ES8388_ADCCONTROL4, reg | (bits << 2));
-                break;
-            default:
-                break;
-        }
-
+        res |=  es8388_write_reg(ES8388_ADDR, ES8388_ADCCONTROL4, reg | (bits << 2));
     }
-    if(mode == MEDIA_HAL_CODEC_MODE_DECODE || mode == MEDIA_HAL_CODEC_MODE_BOTH) {
+    if (mode == ES_MODULE_DAC || mode == ES_MODULE_ADC_DAC) {
         res = es8388_read_reg(ES8388_DACCONTROL1, &reg);
         reg = reg & 0xc7;
-        switch(bits_per_sample) {
-            case MEDIA_HAL_BIT_LENGTH_8BITS:
-                break;
-            case MEDIA_HAL_BIT_LENGTH_16BITS:
-                bits = 0x03;
-                res |=  es8388_write_reg(ES8388_ADDR, ES8388_DACCONTROL1, reg | (bits << 3));
-                break;
-            case MEDIA_HAL_BIT_LENGTH_18BITS:
-                bits = 0x02;
-                res |=  es8388_write_reg(ES8388_ADDR, ES8388_DACCONTROL1, reg | (bits << 3));
-                break;
-            case MEDIA_HAL_BIT_LENGTH_20BITS:
-                bits = 0x01;
-                res |=  es8388_write_reg(ES8388_ADDR, ES8388_DACCONTROL1, reg | (bits << 3));
-                break;
-            case MEDIA_HAL_BIT_LENGTH_24BITS:
-                bits = 0x00;
-                res |=  es8388_write_reg(ES8388_ADDR, ES8388_DACCONTROL1, reg | (bits << 3));
-                break;
-            case MEDIA_HAL_BIT_LENGTH_32BITS:
-                bits = 0x04;
-                res |=  es8388_write_reg(ES8388_ADDR, ES8388_DACCONTROL1, reg | (bits << 3));
-                break;
-            default:
-                break;
-        }
-    }  
+        res |= es8388_write_reg(ES8388_ADDR, ES8388_DACCONTROL1, reg | (bits << 3));
+    }
     return res;
 }
 
@@ -511,12 +476,29 @@ esp_err_t es8388_write_register(uint8_t reg_add, uint8_t data)
 
 esp_err_t es8388_set_i2s_clk(media_hal_codec_mode_t media_hal_codec_mode, media_hal_bit_length_t media_hal_bit_length)
 {
-    int clk_div = 2;
-    esp_err_t ret;
-    if(media_hal_bit_length == MEDIA_HAL_BIT_LENGTH_16BITS || media_hal_bit_length == MEDIA_HAL_BIT_LENGTH_32BITS) {
-        clk_div = 3;
+    int clk_div = 2, tmp = 0;
+    esp_err_t ret = ESP_OK;
+
+    switch (media_hal_bit_length) {
+        case MEDIA_HAL_BIT_LENGTH_16BITS:
+            tmp = BIT_LENGTH_16BITS;
+            clk_div = 3;
+        break;
+        case MEDIA_HAL_BIT_LENGTH_18BITS:
+            tmp = BIT_LENGTH_18BITS;
+        break;
+        case MEDIA_HAL_BIT_LENGTH_20BITS:
+            tmp = BIT_LENGTH_20BITS;
+        break;
+        case MEDIA_HAL_BIT_LENGTH_24BITS:
+            tmp = BIT_LENGTH_24BITS;
+        break;
+        default:
+            tmp = BIT_LENGTH_32BITS;
+            clk_div = 3;
     }
-    ret = es8388_set_bits_per_sample(media_hal_codec_mode, media_hal_bit_length);
+
+    ret |= es8388_set_bits_per_sample(ES_MODULE_ADC_DAC, tmp);
     ret |= es8388_write_reg(ES8388_ADDR, ES8388_ADCCONTROL5, clk_div);  //ADCFsMode,singel SPEED,RATIO=256
     ret |= es8388_write_reg(ES8388_ADDR, ES8388_DACCONTROL2, clk_div);  //ADCFsMode,singel SPEED,RATIO=256
     return ret;

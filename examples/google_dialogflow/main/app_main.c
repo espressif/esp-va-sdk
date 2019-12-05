@@ -19,7 +19,7 @@
 #include <media_hal.h>
 #include <tone.h>
 #include <auth_delegate.h>
-#include <va_dsp.h>
+#include <speech_recognizer.h>
 #include <va_board.h>
 
 static const char *TAG = "[app_main]";
@@ -156,6 +156,6 @@ void app_main()
         while(1) vTaskDelay(2);
     }
     /* This is a blocking call */
-    va_dsp_init();
+    va_dsp_init(speech_recognizer_recognize, speech_recognizer_record);
     return;
 }

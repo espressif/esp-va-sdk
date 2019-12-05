@@ -7,10 +7,38 @@
 #include "voice_assistant.h"
 #include "auth_delegate.h"
 
-/** The Alexa Configuration Structure
+/** Enable Larger tones.
+ *
+ * This API will enable a tone which would be played if dialog is in progress and timer/alarm goes off.
+ * Enabling this tone would increase size of binary by around 356 KB.
+ */
+void alexa_tone_enable_larger_tones();
+
+/** Change Alexa Language.
+ *
+ * This API can be used to change the default locale i.e language and/or accent for Alexa. The supported locales can be found here: https://developer.amazon.com/docs/alexa-voice-service/settings.html
+ */
+void alexa_change_locale(const char *locale);
+
+/** Application callback for a successful Alexa sign in */
+typedef void (*alexa_app_signin_handler_t)(void *data);
+
+/** Application callback for a successful Alexa sign out */
+typedef void (*alexa_app_signout_handler_t)(void *data);
+
+/** Initialize authentication module for Alexa
+ *
+ * @param: signin_handler Callback called upon successful sign in
+ * @param: signout_handler Callback called upong successful sign out
+ */
+void alexa_auth_delegate_init(alexa_app_signin_handler_t signin_handler, alexa_app_signout_handler_t signout_handler);
+void alexa_auth_delegate_signin(auth_delegate_config_t *cfg);
+void alexa_auth_delegate_signout();
+
+/**
+ * The Alexa Configuration Structure
  */
 typedef struct {
-    va_playback_config_t va_playback;
     char *device_serial_num;
     char *product_id;
 } alexa_config_t;
@@ -27,28 +55,11 @@ typedef struct {
  */
 int alexa_init(alexa_config_t *cfg);
 
-/** Initialise Alexa Bluetooth
+/** Enable BT A2DP sink
  *
- * This enables Alexa's Bluetooth A2DP sink functionality.
+ *  Function enables BT A2DP sink functionality and registers it with Alexa. Function should be called before
+ *  the call to alexa_init()
  */
-int alexa_bluetooth_init();
-
-/** Enable Larger tones.
- *
- * This API will enable a tone which would be played if dialog is in progress and timer/alarm goes off.
- * Enabling this tone would increase size of binary by around 356 KB.
- */
-void alexa_tone_enable_larger_tones();
-
-/** Change Alexa Language.
- *
- * This API can be used to change the default locale i.e language and/or accent for Alexa. The supported locales can be found here: https://developer.amazon.com/docs/alexa-voice-service/settings.html
- */
-void alexa_change_locale(const char *locale);
-
-void alexa_auth_delegate_signin(auth_delegate_config_t *cfg);
-void alexa_auth_delegate_signout();
-void alexa_signin_handler(const char *client_id, const char *refresh_token);
-void alexa_signout_handler();
+void alexa_bt_a2dp_sink_init();
 
 #endif /*_ALEXA_H_ */

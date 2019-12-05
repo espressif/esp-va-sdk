@@ -46,7 +46,7 @@ typedef struct http_playback_stream_config {
 } http_playback_stream_config_t;
 
 typedef struct http_playback_stream_custom_data {
-    const char *content_type;
+    http_hls_mime_type_t content_type;
     int offset_in_ms;
 } http_playback_stream_custom_data_t;
 

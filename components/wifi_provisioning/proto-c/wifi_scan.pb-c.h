@@ -15,6 +15,7 @@ PROTOBUF_C__BEGIN_DECLS
 #endif
 
 #include "constants.pb-c.h"
+#include "wifi_constants.pb-c.h"
 
 typedef struct _CmdScanStart CmdScanStart;
 typedef struct _RespScanStart RespScanStart;
@@ -99,10 +100,12 @@ struct  _WiFiScanResult
   ProtobufCBinaryData ssid;
   uint32_t channel;
   int32_t rssi;
+  ProtobufCBinaryData bssid;
+  WifiAuthMode auth;
 };
 #define WI_FI_SCAN_RESULT__INIT \
  { PROTOBUF_C_MESSAGE_INIT (&wi_fi_scan_result__descriptor) \
-    , {0,NULL}, 0, 0 }
+    , {0,NULL}, 0, 0, {0,NULL}, WIFI_AUTH_MODE__Open }
 
 
 struct  _RespScanResult

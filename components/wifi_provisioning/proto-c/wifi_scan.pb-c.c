@@ -582,7 +582,7 @@ const ProtobufCMessageDescriptor cmd_scan_result__descriptor =
   (ProtobufCMessageInit) cmd_scan_result__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
-static const ProtobufCFieldDescriptor wi_fi_scan_result__field_descriptors[3] =
+static const ProtobufCFieldDescriptor wi_fi_scan_result__field_descriptors[5] =
 {
   {
     "ssid",
@@ -620,8 +620,34 @@ static const ProtobufCFieldDescriptor wi_fi_scan_result__field_descriptors[3] =
     0,             /* flags */
     0,NULL,NULL    /* reserved1,reserved2, etc */
   },
+  {
+    "bssid",
+    4,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(WiFiScanResult, bssid),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "auth",
+    5,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_ENUM,
+    0,   /* quantifier_offset */
+    offsetof(WiFiScanResult, auth),
+    &wifi_auth_mode__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
 };
 static const unsigned wi_fi_scan_result__field_indices_by_name[] = {
+  4,   /* field[4] = auth */
+  3,   /* field[3] = bssid */
   1,   /* field[1] = channel */
   2,   /* field[2] = rssi */
   0,   /* field[0] = ssid */
@@ -629,7 +655,7 @@ static const unsigned wi_fi_scan_result__field_indices_by_name[] = {
 static const ProtobufCIntRange wi_fi_scan_result__number_ranges[1 + 1] =
 {
   { 1, 0 },
-  { 0, 3 }
+  { 0, 5 }
 };
 const ProtobufCMessageDescriptor wi_fi_scan_result__descriptor =
 {
@@ -639,7 +665,7 @@ const ProtobufCMessageDescriptor wi_fi_scan_result__descriptor =
   "WiFiScanResult",
   "",
   sizeof(WiFiScanResult),
-  3,
+  5,
   wi_fi_scan_result__field_descriptors,
   wi_fi_scan_result__field_indices_by_name,
   1,  wi_fi_scan_result__number_ranges,

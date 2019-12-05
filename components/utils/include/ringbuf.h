@@ -54,24 +54,129 @@ typedef struct ringbuf {
     int reader_unblock;
 } ringbuf_t;
 
+/**
+ * @brief Create and initialize ringbuffer.
+ *
+ * @param[in]  rb_name Name of the ringbuffer
+ * @param[in]  size size of the ringbuffer
+ * @return
+ *     - ringbuffer handle
+ *     - NULL if failed.
+ */
 ringbuf_t *rb_init(const char *rb_name, uint32_t size);
+
+/**
+ * @brief Cleanup and destroy ringbuffer.
+ *
+ * @param[in]  rb ringbuffer handle to destroy
+ *
+ * @note    Memory allocated will be freed with this api. This rb should not be used after this.
+ */
+void rb_cleanup(ringbuf_t *rb);
+
+/**
+ * @brief Abort reads on ringbuffer.
+ */
 void rb_abort_read(ringbuf_t *rb);
+
+/**
+ * @brief Abort writes on ringbuffer.
+ */
 void rb_abort_write(ringbuf_t *rb);
+
+/**
+ * @brief Abort both read and write operations on ringbuffer.
+ *
+ * @note `rb_reset` should be called on this `rb` to make it usable again.
+ */
 void rb_abort(ringbuf_t *rb);
+
+/**
+ * @brief Reset the ringbuffer.
+ *
+ * This will reset ringbuffer as if new.
+ *
+ * @param[in]  rb ringbuffer handle to reset
+ */
 void rb_reset(ringbuf_t *rb);
+
 /**
  * @brief Special function to reset the buffer while keeping rb_write aborted.
+ *
  *        This rb needs to be reset again before being useful.
  */
 void rb_reset_and_abort_write(ringbuf_t *rb);
+
+/**
+ * @brief Print buffer stats.
+ *
+ *        This function is responsible to print rb_size, available bytes, and buffer pointer.
+ */
 void rb_stat(ringbuf_t *rb);
+
+/**
+ * @brief Return rb filled size.
+ *
+ * @param[in]  rb ringbuffer handle
+ */
 ssize_t rb_filled(ringbuf_t *rb);
+
+/**
+ * @brief Return rb available size.
+ *
+ * @param[in]  rb ringbuffer handle
+ */
 ssize_t rb_available(ringbuf_t *rb);
+
+/**
+ * @brief Read from ring buffer
+ *
+ * @param[in]  rb Ringbuffer handle
+ * @param[in]  buf Buffer to read data in
+ * @param[in]  len size of data to be read
+ * @param[in]  ticks_to_wait Max wait ticks if data not available
+ *
+ * @return
+ *     - Number of bytes read
+ *     - -ve value indicating error.
+ *
+ * @note If `buf` is send NULL, then ring buffer will simply waste `len` number of bytes by manipulating pointers internally.
+ */
 int rb_read(ringbuf_t *rb, uint8_t *buf, int len, uint32_t ticks_to_wait);
+
+/**
+ * @brief Read from ring buffer
+ *
+ * @param[in]  rb Ringbuffer handle
+ * @param[in]  buf Buffer to write data from
+ * @param[in]  len size of data to be written
+ * @param[in]  ticks_to_wait Max wait ticks if no space available in rb
+ *
+ * @return
+ *     - Number of bytes written
+ *     - -ve value indicating error.
+ */
 int rb_write(ringbuf_t *rb, const uint8_t *buf, int len, uint32_t ticks_to_wait);
-void rb_cleanup(ringbuf_t *rb);
+
+/**
+ * @brief Tell ringbuffer that no more writes will be done.
+ *
+ * @param[in]  rb ringbuffer handle
+ */
 void rb_signal_writer_finished(ringbuf_t *rb);
+
+/**
+ * @brief Wake up from current rb_read operation.
+ *
+ * @param[in]  rb ringbuffer handle
+ */
 void rb_wakeup_reader(ringbuf_t *rb);
+
+/**
+ * @brief Check if write operations are finished.
+ *
+ * @param[in]  rb ringbuffer handle
+ */
 int rb_is_writer_finished(ringbuf_t *rb);
 
 #ifdef __cplusplus

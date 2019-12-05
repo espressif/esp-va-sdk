@@ -12,8 +12,7 @@
 #include <esp_log.h>
 #include <media_hal.h>
 #include <voice_assistant.h>
-#include <speech_recognizer.h>
-#include <va_mem_utils.h>
+#include <esp_audio_mem.h>
 #include <va_button.h>
 #include <va_nvs_utils.h>
 #include <va_dsp.h>
@@ -32,22 +31,32 @@ enum va_dsp_state {
     STOPPED,
     MUTED,
 };
-static enum va_dsp_state dsp_state;
-static QueueHandle_t cmd_queue;
-static uint8_t audio_buf[AUDIO_BUF_SIZE];
-static bool va_dsp_booted = false;
+
 static int8_t dsp_mute_en;
+
+static struct va_dsp_data_t {
+    va_dsp_record_cb_t va_dsp_record_cb;
+    va_dsp_recognize_cb_t va_dsp_recognize_cb;
+    enum va_dsp_state dsp_state;
+    QueueHandle_t cmd_queue;
+    uint8_t audio_buf[AUDIO_BUF_SIZE];
+    bool va_dsp_booted;
+} va_dsp_data = {
+    .va_dsp_record_cb = NULL,
+    .va_dsp_recognize_cb = NULL,
+    .va_dsp_booted = false,
+};
 
 static inline void _va_dsp_stop_streaming()
 {
     lyrat_stop_capture();
-    dsp_state = STOPPED;
+    va_dsp_data.dsp_state = STOPPED;
 }
 
 static inline void _va_dsp_start_streaming()
 {
     lyrat_start_capture();
-    dsp_state = STREAMING;
+    va_dsp_data.dsp_state = STREAMING;
 }
 
 static inline int _va_dsp_stream_audio(uint8_t *buffer, int size, int wait)
@@ -57,25 +66,25 @@ static inline int _va_dsp_stream_audio(uint8_t *buffer, int size, int wait)
 
 static inline void _va_dsp_mute_mic()
 {
-    if (dsp_state == STREAMING) {
+    if (va_dsp_data.dsp_state == STREAMING) {
         lyrat_stop_capture();
     }
     lyrat_mic_mute();
-    dsp_state = MUTED;
+    va_dsp_data.dsp_state = MUTED;
 }
 
 static inline void _va_dsp_unmute_mic()
 {
     lyrat_mic_unmute();
-    dsp_state = STOPPED;
+    va_dsp_data.dsp_state = STOPPED;
 }
 
 static void va_dsp_thread(void *arg)
 {
     struct dsp_event_data event_data;
     while(1) {
-        xQueueReceive(cmd_queue, &event_data, portMAX_DELAY);
-        switch (dsp_state) {
+        xQueueReceive(va_dsp_data.cmd_queue, &event_data, portMAX_DELAY);
+        switch (va_dsp_data.dsp_state) {
             case STREAMING:
                 switch (event_data.event) {
                     case TAP_TO_TALK:
@@ -83,13 +92,13 @@ static void va_dsp_thread(void *arg)
                         _va_dsp_stop_streaming();
                         break;
                     case GET_AUDIO: {
-                        int read_len = _va_dsp_stream_audio(audio_buf, AUDIO_BUF_SIZE, portMAX_DELAY);
+                        int read_len = _va_dsp_stream_audio(va_dsp_data.audio_buf, AUDIO_BUF_SIZE, portMAX_DELAY);
                         if (read_len > 0) {
-                            speech_recognizer_record(audio_buf, read_len);
+                            va_dsp_data.va_dsp_record_cb(va_dsp_data.audio_buf, read_len);
                             struct dsp_event_data new_event = {
                                 .event = GET_AUDIO
                             };
-                            xQueueSend(cmd_queue, &new_event, portMAX_DELAY);
+                            xQueueSend(va_dsp_data.cmd_queue, &new_event, portMAX_DELAY);
                         } else {
                             _va_dsp_stop_streaming();
                         }
@@ -117,12 +126,12 @@ static void va_dsp_thread(void *arg)
                             /*XXX: Should we close the stream here?*/
                             break;
                         }
-                        if (speech_recognizer_recognize(phrase_length, WAKEWORD) == 0) {
+                        if (va_dsp_data.va_dsp_recognize_cb(phrase_length, WAKEWORD) == 0) {
                             struct dsp_event_data new_event = {
                                 .event = GET_AUDIO
                             };
-                            xQueueSend(cmd_queue, &new_event, portMAX_DELAY);
-                            dsp_state = STREAMING;
+                            xQueueSend(va_dsp_data.cmd_queue, &new_event, portMAX_DELAY);
+                            va_dsp_data.dsp_state = STREAMING;
                         } else {
                             printf("%s: Error starting a new dialog..stopping capture\n", TAG);
                             _va_dsp_stop_streaming();
@@ -130,12 +139,12 @@ static void va_dsp_thread(void *arg)
                         break;
                     }
                     case TAP_TO_TALK:
-                        if (speech_recognizer_recognize(0, TAP) == 0) {
+                        if (va_dsp_data.va_dsp_recognize_cb(0, TAP) == 0) {
                             _va_dsp_start_streaming();
                             struct dsp_event_data new_event = {
                                 .event = GET_AUDIO
                             };
-                            xQueueSend(cmd_queue, &new_event, portMAX_DELAY);
+                            xQueueSend(va_dsp_data.cmd_queue, &new_event, portMAX_DELAY);
                         }
                         break;
                     case START_MIC:
@@ -143,7 +152,7 @@ static void va_dsp_thread(void *arg)
                         struct dsp_event_data new_event = {
                             .event = GET_AUDIO
                         };
-                        xQueueSend(cmd_queue, &new_event, portMAX_DELAY);
+                        xQueueSend(va_dsp_data.cmd_queue, &new_event, portMAX_DELAY);
                         break;
                     case MUTE:
                         _va_dsp_mute_mic();
@@ -174,7 +183,7 @@ static void va_dsp_thread(void *arg)
                 break;
 
             default:
-                printf("%s: Unknown state %d with Event %d\n", TAG, dsp_state, event_data.event);
+                printf("%s: Unknown state %d with Event %d\n", TAG, va_dsp_data.dsp_state, event_data.event);
                 break;
         }
     }
@@ -186,7 +195,7 @@ int va_app_speech_stop()
     struct dsp_event_data new_event = {
         .event = STOP_MIC
     };
-    xQueueSend(cmd_queue, &new_event, portMAX_DELAY);
+    xQueueSend(va_dsp_data.cmd_queue, &new_event, portMAX_DELAY);
     return 0;
 }
 
@@ -196,20 +205,20 @@ int va_app_speech_start()
     struct dsp_event_data new_event = {
         .event = START_MIC
     };
-    xQueueSend(cmd_queue, &new_event, portMAX_DELAY);
+    xQueueSend(va_dsp_data.cmd_queue, &new_event, portMAX_DELAY);
     return 0;
 }
 
 int va_dsp_tap_to_talk_start()
 {
-    if (va_dsp_booted == false) {
+    if (va_dsp_data.va_dsp_booted == false) {
         return -1;
     }
     printf("%s: Sending start for tap to talk command\n", TAG);
     struct dsp_event_data new_event = {
         .event = TAP_TO_TALK
     };
-    xQueueSend(cmd_queue, &new_event, portMAX_DELAY);
+    xQueueSend(va_dsp_data.cmd_queue, &new_event, portMAX_DELAY);
     return ESP_OK;
 }
 
@@ -220,10 +229,10 @@ int va_app_playback_starting()
 
 void va_dsp_reset()
 {
-    if (va_dsp_booted == true) {
+    if (va_dsp_data.va_dsp_booted == true) {
         struct dsp_event_data new_event;
         new_event.event = MUTE;
-        xQueueSend(cmd_queue, &new_event, portMAX_DELAY);
+        xQueueSend(va_dsp_data.cmd_queue, &new_event, portMAX_DELAY);
     }
 }
 
@@ -235,23 +244,26 @@ void va_dsp_mic_mute(bool mute)
     else
         new_event.event = UNMUTE;
     va_nvs_set_i8(DSP_NVS_KEY, mute);
-    xQueueSend(cmd_queue, &new_event, portMAX_DELAY);
+    xQueueSend(va_dsp_data.cmd_queue, &new_event, portMAX_DELAY);
 }
 
-void va_dsp_init(void)
+void va_dsp_init(va_dsp_recognize_cb_t va_dsp_recognize_cb, va_dsp_record_cb_t va_dsp_record_cb)
 {
+    va_dsp_data.va_dsp_record_cb = va_dsp_record_cb;
+    va_dsp_data.va_dsp_recognize_cb = va_dsp_recognize_cb;
+
     lyrat_init();
     TaskHandle_t xHandle = NULL;
-    StackType_t *task_stack = (StackType_t *)va_mem_alloc(STACK_SIZE, VA_MEM_INTERNAL);
+    StackType_t *task_stack = (StackType_t *) heap_caps_calloc(1, STACK_SIZE, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     static StaticTask_t task_buf;
 
-    cmd_queue = xQueueCreate(10, sizeof(struct dsp_event_data));
-    if (!cmd_queue) {
+    va_dsp_data.cmd_queue = xQueueCreate(10, sizeof(struct dsp_event_data));
+    if (!va_dsp_data.cmd_queue) {
         ESP_LOGE(TAG, "Error creating va_dsp queue");
         return;
     }
 
-    dsp_state = STOPPED;
+    va_dsp_data.dsp_state = STOPPED;
     if (va_nvs_get_i8(DSP_NVS_KEY, &dsp_mute_en) == ESP_OK) {
         if (dsp_mute_en) {
             va_dsp_mic_mute(dsp_mute_en);
@@ -266,5 +278,5 @@ void va_dsp_init(void)
     }
 
     va_boot_dsp_signal();
-    va_dsp_booted = true;
+    va_dsp_data.va_dsp_booted = true;
 }

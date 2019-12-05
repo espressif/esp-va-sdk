@@ -4,6 +4,7 @@
 #include "esp_types.h"
 #include "driver/i2c.h"
 #include "media_hal.h"
+#include "esxxx_common.h"
 
 /*Enable pin for es8388*/
 #define GPIO_PA_EN           GPIO_NUM_21
@@ -128,7 +129,7 @@ typedef enum {
  * @brief Select ES8388 working module
  */
 typedef enum {
-    ES8388_MODULE_ADC = 0x01,  //select adc mode     
+    ES8388_MODULE_ADC = 0x01,  //select adc mode
     ES8388_MODULE_DAC,         //select dac mode
     ES8388_MODULE_ADC_DAC,     //select both, adc and dac mode
     ES8388_MODULE_LINE,        //select line mode
@@ -173,10 +174,10 @@ typedef enum {
  *
  * @return     int, 0--success, others--fail
  */
-esp_err_t es8388_init(media_hal_op_mode_t es8388_mode, media_hal_adc_input_t es8388_adc_input, media_hal_dac_output_t es8388_dac_output, int port_num);
+esp_err_t es8388_init(media_hal_config_t *media_hal_conf);
 
 /**
- * @brief De-initialize es8388 audio codec 
+ * @brief De-initialize es8388 audio codec
  *
  * @param port_num i2c port number
  *
@@ -213,7 +214,7 @@ esp_err_t es8388_set_i2s_clk(media_hal_codec_mode_t mode, media_hal_bit_length_t
  *
  * @return     int, 0--success, others--fail
  */
-esp_err_t es8388_set_bits_per_sample(media_hal_codec_mode_t mode, media_hal_bit_length_t bits_per_sample);
+esp_err_t es8388_set_bits_per_sample(es_module_t mode, es_bits_length_t bits_per_sample);
 
 /**
  * @brief Start/stop selected mode of es8388
@@ -229,7 +230,7 @@ esp_err_t es8388_set_state(media_hal_codec_mode_t mode, media_hal_sel_state_t me
  * @brief Set voice volume for audio output
  *        @note if volume is 0, mute is enabled
  *
- * @param volume value of volume in percent(%) 
+ * @param volume value of volume in percent(%)
  *
  * @return     int, 0--success, others--fail
  */
@@ -239,7 +240,7 @@ esp_err_t es8388_control_volume(uint8_t volume);
  * @brief get voice volume
  *        @note if volume is 0, mute is enabled
  *
- * @param volume value of volume in percent returned(%) 
+ * @param volume value of volume in percent returned(%)
  *
  * @return     int, 0--success, others--fail
  */

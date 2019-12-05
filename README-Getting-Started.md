@@ -24,18 +24,21 @@ $ export IDF_PATH=/path/to/esp-idf
 # Set audio_board path. e.g. For LyraT board:
 $ export AUDIO_BOARD_PATH=/path/to/esp-va-sdk/board_support_pkgs/lyrat/audio_board/audio_board_lyrat/
 
-$ make -j 8 flash monitor
+$ make -j 8 flash monitor [ALEXA_BT=1]
 ```
-NOTE:
-> The google_voice_assistant and google_dialogflow applications only support Tap-to-talk whereas the amazon_alexa application supports both, "Alexa" wakeword and tap-to-talk.
 * Once you have the firmware flashed, visit the following pages for interacting with the device:
-    * [Alexa](examples/amazon_alexa/README-Alexa.md)
-    * [Google Voice Assistant](examples/google_voice_assistant/README-GVA.md)
-    * [DialogFlow](examples/google_dialogflow/README-Dialogflow.md)
+   * [Alexa](examples/amazon_alexa/README-Alexa.md)
+   * [Google Voice Assistant](examples/google_voice_assistant/README-GVA.md)
+   * [DialogFlow](examples/google_dialogflow/README-Dialogflow.md)
 
+## Enabling BT A2DP Sink support (Only for Alexa)
+* In order to enable BT A2DP sink feature, please pass `ALEXA_BT=1` as command-line argument to make.
 
 # Upgrading from Previous Release
 Please skip this section if you are using the SDK for the first time.
+
+## Upgrading to 1.2-RC1
+* New firmware would require newer Android and iOS app for provisioning and local control. Please update apps from respective app stores.
 
 ## Upgrading to 1.0-RC2
 * The partition table has been changed. If you face any issue, try doing 'make erase_flash' and then flash again.

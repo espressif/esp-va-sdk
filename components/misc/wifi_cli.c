@@ -38,11 +38,20 @@ static int wifi_set_cli_handler(int argc, char *argv[])
         printf("%s: Incorrect arguments\n", TAG);
         return 0;
     }
-    /* Initialize WiFi with default config */
+
+    /**
+     * Initialize WiFi with default config
+     * This is ignored internally if already inited
+     */
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     if (esp_wifi_init(&cfg) != ESP_OK) {
         printf("%s: Failed to init WiFi\n", TAG);
         return 0;
+    }
+
+    /* Stop WiFi */
+    if (esp_wifi_stop() != ESP_OK) {
+        printf("%s: Failed to stop wifi\n", TAG);
     }
 
     /* Configure WiFi as station */
@@ -62,7 +71,7 @@ static int wifi_set_cli_handler(int argc, char *argv[])
     }
     /* (Re)Start WiFi */
     if (esp_wifi_start() != ESP_OK) {
-        printf("%s: Failed to set WiFi configuration\n", TAG);
+        printf("%s: Failed to start WiFi\n", TAG);
         return 0;
     }
     /* Connect to AP */

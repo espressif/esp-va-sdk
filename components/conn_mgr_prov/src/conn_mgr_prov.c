@@ -108,7 +108,7 @@ static esp_err_t conn_mgr_prov_start_service(const char *service_name, const cha
     }
 
     /* Set protocomm version verification endpoint for protocol */
-    protocomm_set_version(g_prov->pc, "proto-ver", "V0.1");
+    protocomm_set_version(g_prov->pc, "proto-ver", "V0.2");
 
     /* Set protocomm security type for endpoint */
     if (g_prov->security == 0) {

@@ -1,5 +1,11 @@
 menu "Voice Assistant Configurations"
 
+config ALEXA_PRODUCT_ID
+    string "Device Product ID"
+    default "esp_avs_open"
+    help
+        Product ID that will be used by the device to connect with AVS.
+
 config ALEXA_REMOVE_SHORT_ALERT_SUPPORT
     bool "Remove the support for short alerts"
     default n

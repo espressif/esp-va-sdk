@@ -17,7 +17,6 @@ typedef struct {
 
 /** The Dialogflow Configuration Structure */
 typedef struct {
-    va_playback_config_t va_playback;
     /** Configurations for the device */
     dialogflow_device_config_t device_config;
 } dialogflow_config_t;

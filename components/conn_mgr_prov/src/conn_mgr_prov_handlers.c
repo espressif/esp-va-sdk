@@ -157,6 +157,7 @@ static esp_err_t scan_result(uint16_t result_index,
     memcpy(result->ssid, record->ssid, sizeof(record->ssid));
     result->channel = record->primary;
     result->rssi = record->rssi;
+    result->auth = record->authmode;
     return ESP_OK;
 }
 

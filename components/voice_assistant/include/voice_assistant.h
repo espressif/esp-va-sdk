@@ -7,16 +7,6 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
-/** Configuration for playback stream
- *  To be set by the application
- *  If the application does not set these values, then the default values are taken
- */
-typedef struct {
-    size_t stack_size;  //Default task stack size is 5000
-    int task_priority;  //Default priority is 5
-    size_t buf_size;    //Default buffer size is 512 bytes
-} va_playback_config_t;
-
 /** Get current Voice Assistant SDK version
  *
  * \return Pointer to version string

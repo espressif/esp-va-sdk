@@ -3,20 +3,7 @@
 
 #pragma once
 
-/** Initiator Type
- */
-enum initiator {
-    /** Communication was initiated using a Wake-Word */
-    WAKEWORD,
-    /** Communication was initiated using a Tap-to-Talk event */
-    TAP,
-    /** This is not yet supported */
-    HOLD_AND_TALK,
-    /** Communication was initatied by voice assistant due to ExpectSpeech. The application will never send this value */
-    EXPECT_SPEECH,
-    /** Communication was initiated with text input. Used in Google Dialogflow */
-    TEXT,
-};
+#include <va_dsp.h>
 
 /** Stream data to the voice assistant
  *

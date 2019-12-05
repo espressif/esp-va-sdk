@@ -47,23 +47,27 @@ esp_err_t playlist_add_entry(http_playlist_t *playlist, char *line, const char *
         return ESP_ERR_NO_MEM;
     }
     if (strncmp(line, "http", 4)) { //This is not a full URI
-        if (!strncmp(line, "//", 2)) { //Schemelesss URI
-            ESP_LOGE(TAG, "Schemeless uri not supported yet! line = %s", line);
+        tmp_str = strdup(host_url);
+        if (!tmp_str) {
+            ESP_LOGE(TAG, "strdup failed. line %d", __LINE__);
             goto add_entry_err1;
-        } else { //Relative URI
-            tmp_str = strdup(host_url);
-            if (!tmp_str) {
-                ESP_LOGE(TAG, "strdup failed");
-                goto add_entry_err1;
+        }
+        if (!strncmp(line, "//", 2)) { //Schemelesss URI
+            char *pos = strchr(tmp_str, ':'); //Search for first ":"
+            if (!pos) { //':' not found case
+                goto add_entry_err2;
             }
+            pos[1] = 0;
+            asprintf(&(new->uri), "%s%s", tmp_str, line);
+        } else { //Relative URI
             char *pos = strrchr(tmp_str, '/'); //Search for last "/"
             if (!pos) { //'/' not found case
                 goto add_entry_err2;
             }
             pos[1] = 0;
             asprintf(&(new->uri), "%s%s", tmp_str, line);
-            free(tmp_str);
         }
+        free(tmp_str);
     } else {
         new->uri = esp_audio_mem_strdup(line);
     }

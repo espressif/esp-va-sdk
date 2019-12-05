@@ -35,7 +35,7 @@ static esp_err_t parse_http_config(void *base_stream)
 {
     http_playback_stream_t *hstream = (http_playback_stream_t *) base_stream;
     bool is_hls = true;
-    const char *content_type;
+    http_hls_mime_type_t mime_type;
 
     if (!hstream->base.event_func.func) {
         free(hstream->cfg.url);
@@ -47,9 +47,10 @@ static esp_err_t parse_http_config(void *base_stream)
         return ESP_FAIL;
     }
 
-    content_type = http_response_get_content_type(hstream->handle);
+    const char *content_type = http_response_get_content_type(hstream->handle);
 
-    if (http_hls_identify_and_init_playlist(&hstream->hls_cfg, content_type, hstream->handle, hstream->cfg.url) == ESP_OK) {
+    mime_type = http_hls_identify_and_init_playlist(&hstream->hls_cfg, content_type, hstream->handle, hstream->cfg.url);
+    if (mime_type == APPLE_URL || mime_type == MPEG_URL || mime_type == XSCPLS_URL) {
         is_hls = true;
     } else {
         /* if it's not HLS, it could be a direct audio url */
@@ -59,17 +60,17 @@ static esp_err_t parse_http_config(void *base_stream)
     int ret = 0;
     do {
         if (is_hls) {
-            content_type = http_hls_connect_new_variant(hstream);
+            mime_type = http_hls_connect_new_variant(hstream);
             if (!hstream->handle) { /* Variant playlist exhausted but no luck. */
                 return ESP_FAIL;
             }
-            if (!content_type) { /* Cannot play this variant. Try next. */
+            if (mime_type == UNKNOWN_URL || mime_type == NO_URL) { /* Cannot play/connect this variant. Try next. */
                 continue;
             }
         }
 
         http_playback_stream_custom_data_t custom_data = {
-            .content_type = content_type,
+            .content_type = mime_type,
             .offset_in_ms = hstream->cfg.offset_in_ms
         };
 
@@ -83,7 +84,7 @@ static esp_err_t parse_http_config(void *base_stream)
             break;
         } else { /* Couldn't play this url. */
             ESP_LOGE(TAG, "Could not play url: %s", hstream->cfg.url);
-            ESP_LOGE(TAG, "content-type = %s", content_type);
+            ESP_LOGE(TAG, "content-type: %d", mime_type);
 
             if (is_hls) {
                 continue; /* Cannot play this variant. Try next. */

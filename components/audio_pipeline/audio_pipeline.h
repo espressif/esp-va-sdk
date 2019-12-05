@@ -118,7 +118,7 @@ esp_err_t audio_pipe_register_event_cb(audio_pipe_t *p, audio_event_fn_arg_t *ev
 audio_stream_identifier_t audio_pipe_get_ip_stream_type(audio_pipe_t *p);
 
 /** Get input codec type from pipeline */
-audio_codec_identifier_t audio_pipe_get_codec_type(audio_pipe_t *p);
+audio_codec_type_t audio_pipe_get_codec_type(audio_pipe_t *p);
 
 /** Set/update input stream/callback with new_stream in pipeline
  *

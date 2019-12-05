@@ -79,3 +79,18 @@ print_spiffs:
 	echo "To also flash spiffs, run 'make spiffs_flash' or add the following line to the python flash command: "
 	echo $(SPIFFS_OFFSET) $(SPIFFS_BIN)
 endif
+
+IDF_TARGET ?= default
+defconfig: build/sdkdefault.txt
+clean: sdkdefault_clean
+
+build/sdkdefault.txt:
+	echo "Adding extra configurations to sdkconfig from sdkconfig.defaults."$(IDF_TARGET) "and then the configurations from sdkconfig.defaults"
+	mkdir -p build
+	echo "Done" > build/sdkdefault.txt
+	if [ -f customers/sdkconfig.defaults.$(IDF_TARGET) ]; then \
+		cat customers/sdkconfig.defaults.$(IDF_TARGET) >> sdkconfig; \
+	fi;
+
+sdkdefault_clean:
+	rm build/sdkdefault.txt

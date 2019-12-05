@@ -38,13 +38,15 @@ extern "C" {
 #define CODEC_BASE(x) (&x->base)
 
 typedef enum {
-    CODEC_TYPE_MP3 = 1,
-    CODEC_TYPE_AAC,
-    CODEC_TYPE_MP4,
-    CODEC_TYPE_OPUS,
-    CODEC_TYPE_FLAC,
-    CODEC_TYPE_AMR
-} audio_codec_identifier_t;
+    CODEC_TYPE_MP3_DECODER = 1,
+    CODEC_TYPE_AAC_DECODER,
+    CODEC_TYPE_OPUS_DECODER,
+    CODEC_TYPE_AMR_DECODER,
+    CODEC_TYPE_WAV_DECODER,
+    CODEC_TYPE_AMR_ENCODER,
+    CODEC_TYPE_FLAC_ENCODER,
+    CODEC_TYPE_OPUS_ENCODER
+} audio_codec_type_t;
 
 /* Audio type */
 typedef enum {
@@ -108,7 +110,7 @@ struct audio_codec {
     audio_codec_cfg_t cfg;
 
     const char *label;
-    audio_codec_identifier_t identifier;
+    audio_codec_type_t identifier;
 
     /* To be filled by the higher layer application */
     audio_io_fn_arg_t codec_input;
@@ -133,7 +135,7 @@ esp_err_t audio_codec_init(audio_codec_t *codec, const char *label, audio_io_fn_
                             audio_io_fn_arg_t *codec_output, audio_event_fn_arg_t *event_func);
 
 esp_err_t audio_codec_modify_input_cb(audio_codec_t *codec, audio_io_fn_arg_t *codec_input);
-audio_codec_identifier_t audio_codec_get_identifier(audio_codec_t *codec);
+audio_codec_type_t audio_codec_get_identifier(audio_codec_t *codec);
 
 esp_err_t audio_codec_start(audio_codec_t *codec);
 esp_err_t audio_codec_stop(audio_codec_t *codec);

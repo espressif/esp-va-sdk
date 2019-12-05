@@ -4,6 +4,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <stdbool.h>
 #include <voice_assistant_app_cb.h>
 #include <media_hal_playback.h>
 
@@ -14,6 +15,8 @@ typedef enum {
     TONE_PRIVACY_ON,
     TONE_PRIVACY_OFF,
     TONE_VOLUME,
+    TONE_BT_CONNECT,
+    TONE_BT_DISCONNECT,
     TONE_ALARM_SHORT,
     TONE_TIMER_SHORT,
     TONE_REMINDER_SHORT,
@@ -45,3 +48,8 @@ int tone_play_custom(const uint8_t *start, const uint8_t *end, media_hal_audio_i
  */
 void tone_set_custom(tone_type_t type, const uint8_t *start, const uint8_t *end, media_hal_audio_info_t *audio_info);
 int tone_play(tone_type_t type);
+esp_err_t tone_set_sor_state(bool enabled);
+esp_err_t tone_set_eor_state(bool enabled);
+bool tone_get_sor_state();
+bool tone_get_eor_state();
+

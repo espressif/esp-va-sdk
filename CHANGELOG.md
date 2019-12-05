@@ -1,4 +1,40 @@
 ## ChangeLog
+
+### 1.2-RC1 - 2019-11-13
+
+**Enhancements**
+
+* Support for BT A2DP sink with Alexa.
+* Support for setting device configuration via companion app. Below are the configuration options settable/gettable via the app:
+    * Assistant's language
+    * Device name (visible over local network after provisioning)
+    * Device volume
+    * Alexa WW detection tone (start tone)
+    * Query end tone (end tone)
+* Support for displaying WiFi's authentication mode (open or secure) in the app during provisioning.
+* Support for streaming binary/octate-stream media content type.
+* Support for 5 linear LED patterns for Alexa events.
+
+**API Changes**
+
+* Removed `va_playback` from alexa_config_t. It is now being handled internally.
+* `media_hal.c` is made common to all boards.
+* `va_dsp_init` api now requires two callback parameters `va_dsp_recognize_cb_t` and `va_dsp_record_cb_t`.
+* Alexa device's "Product ID" can now also be specified from menuconfig.
+
+**Bug Fixes**
+
+* Long duration stability improvements.
+* Fixed a memory leak of 48 bytes after each NVS operation.
+* Fixed occasional WDT exceptions during OTA.
+* Updated certificate for Dialogflow and GVA.
+* Using custom 128-bit UUIDs for BLE services and characteristics instead of standard 16-bit UUIDs.
+
+**Known Issues**
+
+* Enabling BT A2DP sink requires flash size > 4MB.
+* Exhaustion of internal memory when BT A2DP sink is enabled may lead to a crash. This is applicable for boards running Wakeword detection on the host (ESP32).
+
 ### 1.0-RC2 - 2019-08-13
 
 **Enhancements**
@@ -7,7 +43,7 @@
 * Memory optimisations to improve the overall functionality and stability.
 * Added an API to change the locale for amazon_alexa. Also added a cli for the same.
 * Added support for sign-in and sign-out via the app.
-* Added basic support for OTA. The APIs still need to be implemented by the application. (refer to examples/amazon_alexa/main/cloud_agent.h)
+* Added basic support for OTA. The APIs still need to be implemented by the application. (refer to examples/amazon_alexa/main/app_cloud_agent.h)
 * Support for Gaana (India) and Hungama (India) music streaming services.
 * Provisioning app for iOS has also been added. The existing Android app has been updated.
 * Added error message in addition to error LEDs when the wake word is detected and the device is having trouble processing it.
@@ -20,7 +56,7 @@
 * Authentication components have been moved from alexa.h to auth_delegate.h. Refer to the respective files for the changes.
 * `media_hal_data.c` is now made common and is not a part of `board_support_pkgs/<board_name>/esp_codec/` anymore.
   * This complete logic is now moved to `components/media_hal/`. Please take a look at (media_hal_playback.h)[components/media_hal/].
-  * Audio board must initialize `media_hal` using `media_hal_init_playback` with config. For example, for (lyrat_board)[board_support_pkgs/lyrat/audio_boar/audio_board_lyrat/audio_board_lyrat.c].
+  * audio board must initialize `media_hal` using `media_hal_init_playback` with config. For example, for (lyrat_board)[board_support_pkgs/lyrat/audio_boar/audio_board_lyrat/audio_board_lyrat.c].
 * APIs for tone have been changed to support the above media_hal change.
 
 **Bug Fixes**

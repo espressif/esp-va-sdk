@@ -18,4 +18,5 @@ typedef struct ssdp_t {
 ssdp_t *ssdp_init(char *udn, int port);
 void ssdp_add_services(ssdp_t *ssdp, const char *services[]);
 int ssdp_scan_renderer(ssdp_t *ssdp);
+void ssdp_destroy(ssdp_t *ssdp);
 #endif

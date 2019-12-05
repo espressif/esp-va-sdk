@@ -511,7 +511,7 @@ audio_stream_identifier_t audio_pipe_get_ip_stream_type(audio_pipe_t *p)
     }
 }
 
-audio_codec_identifier_t audio_pipe_get_codec_type(audio_pipe_t *p)
+audio_codec_type_t audio_pipe_get_codec_type(audio_pipe_t *p)
 {
     if (p == NULL) {
         return ESP_ERR_INVALID_ARG;

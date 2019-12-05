@@ -39,12 +39,26 @@
  * MIME_TYPE_XSCPLS - pls
  */
 #define MIME_TYPE_APP_XMPEG     "application/x-mpegurl"
-#define MIME_TYPE_AUDIO_XMPEG   "audio/x-mpegurl; charset=utf-8"
+#define MIME_TYPE_AUDIO_XMPEG   "audio/x-mpegurl" /* "audio/x-mpegurl; charset=utf-8" also gets handled here. */
 #define MIME_TYPE_APPLE         "application/vnd.apple.mpegurl"
 #define MIME_TYPE_XSCPLS        "audio/x-scpls"
+#define BIN_OCTET_STREAM        "binary/octet-stream"       /* Tricky type. We never know what this is! */
+#define APP_OCTET_STREAM        "application/octet-stream"  /* Tricky type. We never know what this is! */
+#define AUDIO_MPEG              "audio/mpeg"
+#define AUDIO_MP3               "audio/mp3"
+#define MP3                     "mp3"
+#define AUDIO_MP4               "audio/mp4"
+#define VIDEO_MP4               "video/mp4"
+#define VIDEO_MP2T              "video/MP2T"
+#define AUDIO_AAC               "audio/aac"
+#define AUDIO_AACP              "audio/aacp"
+#define AUDIO_XAAC              "audio/x-aac"
+#define AUDIO_X_HX_AAC          "audio/x-hx-aac-adts"
 
-static void set_mime_type(http_stream_hls_config_t *hls_cfg, const char *mime_type)
+static void set_mime_type(http_stream_hls_config_t *hls_cfg, const char *mime_type, char *url)
 {
+    hls_cfg->mime_type = UNKNOWN_URL; /* Unknown type */
+
     if (!strncmp(mime_type, MIME_TYPE_AUDIO_XMPEG, strlen(MIME_TYPE_AUDIO_XMPEG)) ||
         !strncmp(mime_type, MIME_TYPE_APP_XMPEG, strlen(MIME_TYPE_APP_XMPEG))) {
         hls_cfg->mime_type = MPEG_URL;
@@ -53,14 +67,34 @@ static void set_mime_type(http_stream_hls_config_t *hls_cfg, const char *mime_ty
     } else if (!strncmp(mime_type, MIME_TYPE_XSCPLS, strlen(MIME_TYPE_XSCPLS))) {
         hls_cfg->mime_type = XSCPLS_URL;
     } else {
-        /* Not hls. Could be direct media url. */
-        hls_cfg->mime_type = DIRECT_URL; /* not hls type */
+        /* Not hls. Could be direct media url. Check for it */
+        if (strcmp(mime_type, AUDIO_MPEG) == 0 ||
+                    strcmp(mime_type, AUDIO_MP3) == 0 ||
+                strcmp(mime_type, MP3) == 0) {
+            hls_cfg->mime_type = MP3_URL; /* MP3 URL */
+        } else if (strcmp(mime_type, AUDIO_MP4) == 0 ||
+                    strcmp(mime_type, VIDEO_MP4) == 0 ||
+                strcmp(mime_type, VIDEO_MP2T) == 0 ||
+                strcmp(mime_type, AUDIO_AAC) == 0 ||
+                strcmp(mime_type, AUDIO_AACP) == 0 ||
+                strcmp(mime_type, AUDIO_XAAC) == 0 ||
+                strcmp(mime_type, AUDIO_X_HX_AAC) == 0) {
+            hls_cfg->mime_type = AAC_URL; /* AAC URL */
+        } else if (strcmp(mime_type, BIN_OCTET_STREAM) == 0 ||
+                    strcmp(mime_type, APP_OCTET_STREAM) == 0) {
+            char *dot = strrchr(url, '.');
+            if (dot && (strcasecmp(dot, ".aac") == 0)) {
+                hls_cfg->mime_type = AAC_URL; /* AAC URL */
+            } else {
+                hls_cfg->mime_type = MP3_URL; /* Try it as MP3 URL anyway */
+            }
+        }
     }
 }
 
-int http_hls_identify_and_init_playlist(http_stream_hls_config_t *hls_cfg, const char *mime_type, httpc_conn_t *base_conn_handle, char *url)
+http_hls_mime_type_t http_hls_identify_and_init_playlist(http_stream_hls_config_t *hls_cfg, const char *mime_type, httpc_conn_t *base_conn_handle, char *url)
 {
-    set_mime_type(hls_cfg, mime_type);
+    set_mime_type(hls_cfg, mime_type, url);
     if (hls_cfg->variant_playlist) {
         playlist_free(hls_cfg->variant_playlist);
         hls_cfg->variant_playlist = NULL;
@@ -79,17 +113,13 @@ int http_hls_identify_and_init_playlist(http_stream_hls_config_t *hls_cfg, const
         break;
     default:
         ESP_LOGI(TAG, "Not a playlist. Could be direct URL");
-        return ESP_FAIL;
+        break;
     }
 
-    if (hls_cfg->variant_playlist == NULL) {
-        ESP_LOGE(TAG, "Error parsing playlist");
-        return ESP_FAIL;
-    }
-    return ESP_OK;
+    return hls_cfg->mime_type;
 }
 
-const char *http_hls_connect_new_variant(void *stream)
+http_hls_mime_type_t http_hls_connect_new_variant(void *stream)
 {
     http_playback_stream_t *hstream = (http_playback_stream_t *) stream;
     http_stream_hls_config_t *hls_cfg = &hstream->hls_cfg;
@@ -108,7 +138,7 @@ const char *http_hls_connect_new_variant(void *stream)
         http_request_delete(hstream->handle);
         http_connection_delete(hstream->handle);
         hstream->handle = NULL;
-        return NULL;
+        return NO_URL;
     }
 
     /* Delete existing connection and create new one with new url. */
@@ -116,11 +146,11 @@ const char *http_hls_connect_new_variant(void *stream)
     hstream->cfg.url = url;
 
     if (http_playback_stream_create_or_renew_session(hstream) != ESP_OK) {
-        return NULL;
+        return NO_URL;
     }
 
     char *content_type = http_response_get_content_type(hstream->handle);
-    set_mime_type(hls_cfg, content_type);
+    set_mime_type(hls_cfg, content_type, url);
     http_hls_mime_type_t type = hls_cfg->mime_type;
 
     switch (type) {
@@ -135,11 +165,11 @@ const char *http_hls_connect_new_variant(void *stream)
         ESP_LOGI(TAG, "Previous playlist was not variant! Move variant to media!");
         hls_cfg->media_playlist = hls_cfg->variant_playlist;
         hls_cfg->variant_playlist = NULL;
-        return content_type;
+        return type;
     }
 
     if (!hls_cfg->media_playlist) {
-        return NULL;
+        return NO_URL;
     } else {
         ESP_LOGI(TAG, "Resolved variant Stream - %s", url);
     }
@@ -148,7 +178,7 @@ const char *http_hls_connect_new_variant(void *stream)
     if (!url) { /* Playlist is empty */
         free(hls_cfg->media_playlist);
         hls_cfg->media_playlist = NULL;
-        return NULL;
+        return NO_URL;
     }
 
     /* Delete existing connection and create new one with new url. */
@@ -156,8 +186,12 @@ const char *http_hls_connect_new_variant(void *stream)
     hstream->cfg.url = url;
 
     if (http_playback_stream_create_or_renew_session(hstream) != ESP_OK) {
-        return NULL;
+        return NO_URL;
     }
 
-    return http_response_get_content_type(hstream->handle);
+    content_type = http_response_get_content_type(hstream->handle);
+    set_mime_type(hls_cfg, content_type, url);
+    type = hls_cfg->mime_type;
+
+    return type;
 }

@@ -2,9 +2,7 @@
 
 The ESP-Voice-Assistant SDK provides an implementation of Amazon's Alexa Voice Service, Google Voice Assistant and Google's conversational interface (aka Dialogflow) for ESP32 microcontroller. This facilitates the developers directly run these voice-assistants on an ESP32. The SDK will run on hardware boards that have Microphone/Speaker interfaced with the ESP32.
 
-## License
-* For LyratD-DSPG board based on DSPG's DBMD5P DSP please read the licensing terms [here](board_support_pkgs/lyratd_dspg/dspg_fw/docs/license.pdf) for the DSP fimrware
-* For rest of the ESP-VA-SDK components please refer to the licensing terms [here](LICENSE)
+Please refer to [Changelog](CHANGELOG.md) to track release changes and known-issues.
 
 ### About the SDK
 
@@ -35,10 +33,9 @@ The SDK contains pre-built libraries for Amazon Alexa, Google Voice Assistant (G
 The SDK supports the following hardware platforms:
 * [ESP32-LyraT](https://www.espressif.com/en/products/hardware/esp32-lyrat)
 * [ESP32-LyraTD-MSC](https://www.espressif.com/en/products/hardware/esp32-lyratd-msc)
-* [ESP32-LyraTD-DSPG](https://www.espressif.com/sites/default/files/documentation/ESP32-LyraTD-DSPG_User_Guide__en.pdf)
 
 The following list of acoustic front-ends is also supported. Please contact Espressif to enable acccess to these solutions.
-* DSPG DBMD5P [GitHub support is for evaluation purpose only and uses Espressif's WakeWord Engine].
+* DSPG DBMD5P
 * Intel s1000
 * Synaptics CX20921
 

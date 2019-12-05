@@ -1,4 +1,4 @@
-// Copyright 2018 Espressif Systems (Shanghai) PTE LTD
+// Copyright 2019 Espressif Systems (Shanghai) PTE LTD
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -78,7 +78,7 @@ static esp_err_t cmd_scan_start_handler(WiFiScanPayload *req,
                                   req->cmd_scan_start->group_channels,
                                   req->cmd_scan_start->period_ms,
                                   &h->ctx) == ESP_OK ?
-                    STATUS__Success : STATUS__InternalError);
+                            STATUS__Success : STATUS__InternalError);
     resp->payload_case = WI_FI_SCAN_PAYLOAD__PAYLOAD_RESP_SCAN_START;
     resp->resp_scan_start = resp_payload;
     return ESP_OK;
@@ -104,7 +104,7 @@ static esp_err_t cmd_scan_status_handler(WiFiScanPayload *req,
 
     resp_scan_status__init(resp_payload);
     resp->status = (h->scan_status(&scan_finished, &result_count, &h->ctx) == ESP_OK ?
-                    STATUS__Success : STATUS__InternalError);
+                            STATUS__Success : STATUS__InternalError);
     resp_payload->scan_finished = scan_finished;
     resp_payload->result_count = result_count;
     resp->payload_case = WI_FI_SCAN_PAYLOAD__PAYLOAD_RESP_SCAN_STATUS;
@@ -116,7 +116,7 @@ static esp_err_t cmd_scan_result_handler(WiFiScanPayload *req,
                                          WiFiScanPayload *resp, void *priv_data)
 {
     esp_err_t err;
-    wifi_prov_scan_result_t scan_result = {{0}, 0, 0};
+    wifi_prov_scan_result_t scan_result = {{0}, {0}, 0, 0, 0};
     WiFiScanResult **results = NULL;
     wifi_prov_scan_handlers_t *h = (wifi_prov_scan_handlers_t *) priv_data;
     if (!h) {
@@ -131,6 +131,7 @@ static esp_err_t cmd_scan_result_handler(WiFiScanPayload *req,
     }
     resp_scan_result__init(resp_payload);
 
+    resp->status = STATUS__Success;
     resp->payload_case = WI_FI_SCAN_PAYLOAD__PAYLOAD_RESP_SCAN_RESULT;
     resp->resp_scan_result = resp_payload;
 
@@ -144,6 +145,13 @@ static esp_err_t cmd_scan_result_handler(WiFiScanPayload *req,
     resp_payload->n_entries = req->cmd_scan_result->count;
 
     for (uint16_t i = 0; i < req->cmd_scan_result->count; i++) {
+        err = h->scan_result(i + req->cmd_scan_result->start_index,
+                             &scan_result, &h->ctx);
+        if (err != ESP_OK) {
+            resp->status = STATUS__InternalError;
+            break;
+        }
+
         results[i] = (WiFiScanResult *) malloc(sizeof(WiFiScanResult));
         if (!results[i]) {
             ESP_LOGE(TAG, "Failed to allocate memory for result entry");
@@ -151,20 +159,24 @@ static esp_err_t cmd_scan_result_handler(WiFiScanPayload *req,
         }
         wi_fi_scan_result__init(results[i]);
 
-        err = h->scan_result(i + req->cmd_scan_result->start_index,
-                             &scan_result, &h->ctx);
-
-        resp->status = (err == ESP_OK ? STATUS__Success : STATUS__InternalError);
-
-        results[i]->ssid.data = (uint8_t *) strdup(scan_result.ssid);
+        results[i]->ssid.len = strnlen(scan_result.ssid, 32);
+        results[i]->ssid.data = (uint8_t *) strndup(scan_result.ssid, 32);
         if (!results[i]->ssid.data) {
-            ESP_LOGE(TAG, "Failed to allocate memory for scan result entry");
+            ESP_LOGE(TAG, "Failed to allocate memory for scan result entry SSID");
             return ESP_ERR_NO_MEM;
         }
 
-        results[i]->ssid.len = strlen(scan_result.ssid);
         results[i]->channel = scan_result.channel;
         results[i]->rssi = scan_result.rssi;
+        results[i]->auth = scan_result.auth;
+
+        results[i]->bssid.len = sizeof(scan_result.bssid);
+        results[i]->bssid.data = malloc(results[i]->bssid.len);
+        if (!results[i]->bssid.data) {
+            ESP_LOGE(TAG, "Failed to allocate memory for scan result entry BSSID");
+            return ESP_ERR_NO_MEM;
+        }
+        memcpy(results[i]->bssid.data, scan_result.bssid, results[i]->bssid.len);
     }
     return ESP_OK;
 }
@@ -203,6 +215,7 @@ static void wifi_prov_scan_cmd_cleanup(WiFiScanPayload *resp, void *priv_data)
                     for (uint16_t i = 0; i < resp->resp_scan_result->n_entries; i++) {
                         if (!resp->resp_scan_result->entries[i]) continue;
                         free(resp->resp_scan_result->entries[i]->ssid.data);
+                        free(resp->resp_scan_result->entries[i]->bssid.data);
                         free(resp->resp_scan_result->entries[i]);
                     }
                     free(resp->resp_scan_result->entries);
@@ -275,7 +288,7 @@ esp_err_t wifi_prov_scan_handler(uint32_t session_id, const uint8_t *inbuf, ssiz
         goto exit;
     }
     wi_fi_scan_payload__pack(&resp, *outbuf);
-
+    ESP_LOGD(TAG, "Response packet size : %d", *outlen);
     exit:
 
     wi_fi_scan_payload__free_unpacked(req, NULL);

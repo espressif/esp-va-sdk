@@ -14,4 +14,4 @@ EXTRA_COMPONENT_DIRS += $(AUDIO_HAL_PATH)/led_driver/is31fl3236
 EXTRA_COMPONENT_DIRS += $(AUDIO_HAL_PATH)/esp_codec/es8388/components/
 
 # va_dsp
--include $(IPC_DRV_PATH)/components/va_dsp/va_dsp.mk
+include $(IPC_DRV_PATH)/components/va_dsp/va_dsp.mk

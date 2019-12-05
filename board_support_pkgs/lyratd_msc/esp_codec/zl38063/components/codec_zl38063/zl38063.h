@@ -88,7 +88,7 @@ typedef enum {
  * @brief Select ZL38063 working module
  */
 typedef enum {
-    ZL38063_MODULE_ADC = 0x01,  //select adc mode     
+    ZL38063_MODULE_ADC = 0x01,  //select adc mode
     ZL38063_MODULE_DAC,         //select dac mode
     ZL38063_MODULE_ADC_DAC,     //select both, adc and dac mode
     ZL38063_MODULE_LINE,        //select line mode
@@ -136,7 +136,7 @@ typedef enum {
 esp_err_t zl38063_init(media_hal_op_mode_t zl38063_mode, media_hal_adc_input_t zl38063_adc_input, media_hal_dac_output_t zl38063_dac_output, int port_num);
 
 /**
- * @brief De-initialize zl38063 audio codec 
+ * @brief De-initialize zl38063 audio codec
  *
  * @param port_num i2c port number
  *
@@ -189,7 +189,7 @@ esp_err_t zl38063_set_state(media_hal_codec_mode_t mode, media_hal_sel_state_t m
  * @brief Set voice volume for audio output
  *        @note if volume is 0, mute is enabled
  *
- * @param volume value of volume in percent(%) 
+ * @param volume value of volume in percent(%)
  *
  * @return     int, 0--success, others--fail
  */
@@ -199,7 +199,7 @@ esp_err_t zl38063_control_volume(uint8_t volume);
  * @brief get voice volume
  *        @note if volume is 0, mute is enabled
  *
- * @param volume value of volume in percent returned(%) 
+ * @param volume value of volume in percent returned(%)
  *
  * @return     int, 0--success, others--fail
  */
@@ -232,5 +232,7 @@ esp_err_t zl38063_set_mic_gain(zl38063_mic_gain_t gain);
 esp_err_t zl38063_write_register(uint8_t regAdd, uint8_t data);
 void zl38063_read_all_reg();
 
+esp_err_t zl38063_powerup();
+esp_err_t zl38063_powerdown();
 
 #endif //__ZL38063_INTERFACE_H__

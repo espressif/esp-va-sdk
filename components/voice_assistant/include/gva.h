@@ -18,7 +18,6 @@ typedef struct {
 
 /** The GVA Configuration Structure */
 typedef struct {
-    va_playback_config_t va_playback;
     /** Configurations for the device */
     gva_device_config_t device_config;
 } gva_config_t;

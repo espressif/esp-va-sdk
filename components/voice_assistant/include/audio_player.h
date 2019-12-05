@@ -5,6 +5,7 @@
 #define _AUDIO_PLAYER_H_
 
 #include <stdint.h>
+#include <esp_err.h>
 
 /** Used by the application to specify the play behaviour */
 enum play_behaviour {
@@ -66,7 +67,7 @@ enum event_type {
 void audio_player_play(char *url, char *token, int offset_in_ms, enum play_behaviour behaviour, int time_delay_elapsed, int time_interval_elapsed, void (*notify_cb)(const char *token, uint32_t offset, enum event_type type));
 
 /** Stop the song currently being played by the audio_player
- * 
+ *
  * Use this just to stop the song being played from the calling API
  *
  */
@@ -78,5 +79,23 @@ void audio_player_stop(void (*notify_cb)(const char *token, uint32_t offset, enu
  *
  */
 void audio_player_clear_queue(enum clear_behaviour behaviour);
+
+/**
+ * @brief Register clear queue callback
+ *
+ * @param callback clear queue callback function to register
+ *
+ * @return     int, 0--success, others--fail
+ */
+esp_err_t audio_player_register_clear_queue_cb(int (*callback) (void));
+
+/**
+ * @brief Deregister clear queue callback
+ *
+ * @param callback clear queue callback function to deregister
+ *
+ * @return     int, 0--success, others--fail
+ */
+esp_err_t audio_player_deregister_clear_queue_cb(int (*callback) (void));
 
 #endif /* _AUDIO_PLAYER_H_ */

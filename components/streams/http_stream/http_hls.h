@@ -33,10 +33,13 @@ extern "C" {
 #endif
 
 typedef enum {
-    DIRECT_URL = -1,
+    UNKNOWN_URL = -1,
+    NO_URL = 0,
     APPLE_URL,
     MPEG_URL,
-    XSCPLS_URL
+    XSCPLS_URL,
+    AAC_URL,
+    MP3_URL,
 } http_hls_mime_type_t;
 
 typedef struct {
@@ -46,7 +49,7 @@ typedef struct {
 } http_stream_hls_config_t;
 
 int http_hls_identify_and_init_playlist(http_stream_hls_config_t *hls_cfg, const char *mime_type, httpc_conn_t *base_conn_handle, char *url);
-const char *http_hls_connect_new_variant(void *hstream);
+http_hls_mime_type_t http_hls_connect_new_variant(void *hstream);
 
 #ifdef __cplusplus
 }

@@ -47,6 +47,12 @@ typedef struct {
     } u;
 } auth_delegate_config_t;
 
+/** Auth delegate sign in handler
+ *
+ * Handler will be called when the device has successfully signed in.
+ * @param: client_id Device client ID
+ * @param: refresh_token Device refresh token
+ */
 typedef void (*auth_delegate_signin_handler_t)(const char *client_id, const char *refresh_token);
 typedef void (*auth_delegate_signout_handler_t)(void);
 

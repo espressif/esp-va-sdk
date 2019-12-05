@@ -25,17 +25,77 @@
 #ifndef _ESP_AUDIO_MEM_H_
 #define _ESP_AUDIO_MEM_H_
 
+#include <stdbool.h>
+#include <string.h>
+#include <esp_heap_caps.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+/**
+ * @brief   allocate memory preferably in external RAM
+ *
+ * @param[in]  size   block size
+ *
+ * @return
+ *     - valid pointer on success
+ *     - NULL when any errors
+ */
 void *esp_audio_mem_malloc(int size);
+
+/**
+ * @brief   allocate zero initialized memory preferably in external RAM
+ *
+ * @param[in]  n      number of blocks
+ * @param[in]  size   block size
+ *
+ * @return
+ *     - valid pointer on success
+ *     - NULL when any errors
+ */
 void *esp_audio_mem_calloc(int n, int size);
+
+/**
+ * @brief   realloc memory preferably in external RAM
+ *
+ * @param[in]  old_ptr    pointer to already allocated memory
+ * @param[in]  old_size   old size
+ * @param[in]  new_size   new size
+ *
+ * @return
+ *     - new pointer to reallocated buffer
+ *     - NULL when any errors
+ */
 void *esp_audio_mem_realloc(void *old_ptr, int old_size, int new_size);
+
+/**
+ * @brief   duplicate a string preferably in external RAM
+ *
+ * @param[in]  str    pointer to existing string
+ *
+ * @return
+ *     - Pointer to duplicate string. This buffer must be freed by application.
+ *     - NULL when any errors
+ */
 char *esp_audio_mem_strdup(const char *str);
 
+/**
+ * @brief   allocate dma accesible block of memory
+ *
+ * @param[in]  size   block size
+ *
+ * @return
+ *     - valid pointer on success
+ *     - NULL when any errors
+ */
 void *esp_audio_mem_alloc_dma(int n, int size);
 
+/**
+ * @brief   Free allocated buffer
+ *
+ * @param[in]  ptr    pointer to buffer to be freed
+ */
 void esp_audio_mem_free(void *ptr);
 
 #ifdef __cplusplus

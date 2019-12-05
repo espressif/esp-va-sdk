@@ -46,12 +46,12 @@ static esp_err_t audio_codec_i2c_init(int i2c_master_port)
 {
     int res;
     i2c_config_t pf_i2c_pin = {0};
-    
+
     res = audio_board_i2c_pin_config(i2c_master_port, &pf_i2c_pin);
 
-    pf_i2c_pin.mode = I2C_MODE_MASTER;  
+    pf_i2c_pin.mode = I2C_MODE_MASTER;
     pf_i2c_pin.master.clk_speed = ZL38063_I2C_MASTER_SPEED;
-    
+
     res |= i2c_param_config(i2c_master_port, &pf_i2c_pin);
     res |= i2c_driver_install(i2c_master_port, pf_i2c_pin.mode, 0, 0, 0);
     return res;
@@ -215,9 +215,21 @@ esp_err_t zl38063_set_mute(bool bmute)
     return res;
 }
 
+esp_err_t zl38063_powerup()
+{
+    //TODO
+    return ESP_OK;
+}
+
+esp_err_t zl38063_powerdown()
+{
+    //TODO
+    return ESP_OK;
+}
+
 esp_err_t zl38063_set_bits_per_sample(media_hal_codec_mode_t mode, media_hal_bit_length_t bits_per_sample)
 {
-    esp_err_t res = 0;  
+    esp_err_t res = 0;
     return res;
 }
 
@@ -242,7 +254,7 @@ esp_err_t zl38063_write_register(uint8_t reg_add, uint8_t data)
 
 esp_err_t zl38063_set_i2s_clk(media_hal_codec_mode_t media_hal_codec_mode, media_hal_bit_length_t media_hal_bit_length)
 {
-    
+
     esp_err_t ret = 0;
     return ret;
 }
