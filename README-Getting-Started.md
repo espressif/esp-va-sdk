@@ -33,6 +33,9 @@ $ make -j 8 flash monitor [ALEXA_BT=1]
 
 ## Enabling BT A2DP Sink support (Only for Alexa)
 * In order to enable BT A2DP sink feature, please pass `ALEXA_BT=1` as command-line argument to make.
+* Additional patches from idf_patches directory needs to be applied on ESP-IDF release/v3.2 branch using below commands:
+    * git am </path/to/idf_patches/component-bt-implement-AVRCP-Target-APIs.patch>
+    * git am </path/to/idf_patches/components-bt-Add-AVRCP-feature-about-volume.patch>
 
 # Upgrading from Previous Release
 Please skip this section if you are using the SDK for the first time.

@@ -1,0 +1,4295 @@
+From 588edc733a934d8c749a341598c1c44e7266a71e Mon Sep 17 00:00:00 2001
+From: wangmengyang <wangmengyang@espressif.com>
+Date: Fri, 21 Dec 2018 17:04:21 +0800
+Subject: [PATCH 1/2] component/bt: implement AVRCP Target APIs
+
+1. Add more notification events to the enum according to the event list in AVRCP specification.
+2. Add API and callback events for basic AVRCP target functionalities to do init, deinit, callback-registration, connection status indication.
+3. Implement API to set/get supported PASSTHROUGH command on local AVRCP TG, implement callback events for remote passthrough command indication.
+4. Implement API to set/get supported notification eventIDs on local AVRCP TG, implement API to send event notifications to remote CT. \
+   Currently supported event in TG only includes ESP_AVRC_RN_VOLUME_CHANGE(0xd), which can be extended in later commits.
+5. Implement callback events for SetAbsoluteVolume command indication on TG.
+6. Add limitation of event_ids supported in RegisterNotification command in CT. The supported event_ids include: \
+   ESP_AVRC_RN_PLAY_STATUS_CHANGE(0x1), ESP_AVRC_RN_TRACK_CHANGE(0x2), ESP_AVRC_RN_PLAY_POS_CHANGE(0x5), ESP_AVRC_RN_VOLUME_CHANGE(0xd).
+7. Add feature bit mask in parameter of callback event ESP_AVRC_CT_REMOTE_FEATURES_EVT for peer feature information got from SDP.
+8. Add API and callback event to AVRCP CT to retrieve remote TG's supported notification event capabilities.
+9. Modify data type for parameter of callback event ESP_AVRC_CT_CHANGE_NOTIFY_EVT.
+10. Change AVRCP version from 1.3 to 1.4 for compatibility cause in using AbsoluteVolume feature.
+11. Modify local AVRCP device to be category 1 as CT and category 2 as TG that applies to bluetooth headphones or speakers.
+12. Update the use of AVRCP APIs and events in the two examples: a2dp_sink and a2dp_gatts_coex, which include the demo of volume control and notification.
+---
+ components/bt/CMakeLists.txt                  |    1 +
+ components/bt/bluedroid/api/esp_avrc_api.c    |  290 ++++-
+ .../bluedroid/api/include/api/esp_avrc_api.h  |  427 ++++++-
+ components/bt/bluedroid/bta/av/bta_av_aact.c  |   20 -
+ components/bt/bluedroid/bta/av/bta_av_act.c   |   93 +-
+ components/bt/bluedroid/bta/av/bta_av_api.c   |    5 +-
+ components/bt/bluedroid/bta/av/bta_av_cfg.c   |  110 +-
+ components/bt/bluedroid/bta/av/bta_av_main.c  |    6 +-
+ .../bt/bluedroid/bta/av/include/bta_av_int.h  |    9 +-
+ .../bt/bluedroid/bta/include/bta/bta_av_api.h |   46 +-
+ components/bt/bluedroid/btc/core/btc_task.c   |    3 +-
+ .../bt/bluedroid/btc/include/btc/btc_task.h   |    3 +-
+ .../bluedroid/btc/profile/std/a2dp/btc_av.c   |    3 +-
+ .../btc/profile/std/avrc/bta_avrc_co.c        |  106 ++
+ .../bluedroid/btc/profile/std/avrc/btc_avrc.c | 1045 +++++++++++++++--
+ .../btc/profile/std/include/btc_avrc.h        |   56 +-
+ .../bt/bluedroid/stack/avrc/avrc_bld_ct.c     |   19 +
+ .../bt/bluedroid/stack/avrc/avrc_bld_tg.c     |   34 +-
+ .../bt/bluedroid/stack/avrc/avrc_pars_ct.c    |   27 +-
+ .../bt/bluedroid/stack/avrc/avrc_pars_tg.c    |    3 +
+ components/bt/bluedroid/stack/avrc/avrc_sdp.c |    2 +-
+ .../bt/bluedroid/stack/avrc/avrc_utils.c      |    1 +
+ .../bluedroid/stack/include/stack/avrc_api.h  |    3 +-
+ .../bluedroid/stack/include/stack/avrc_defs.h |    2 +-
+ .../a2dp_gatts_coex/main/bt_app_av.c          |  226 +++-
+ .../a2dp_gatts_coex/main/bt_app_av.h          |    7 +
+ .../a2dp_gatts_coex/main/bt_app_core.c        |   29 +-
+ .../bluetooth/a2dp_gatts_coex/main/main.c     |  110 +-
+ examples/bluetooth/a2dp_sink/main/bt_app_av.c |  199 +++-
+ examples/bluetooth/a2dp_sink/main/bt_app_av.h |    7 +
+ .../bluetooth/a2dp_sink/main/bt_app_core.c    |    2 +-
+ examples/bluetooth/a2dp_sink/main/main.c      |   17 +-
+ 32 files changed, 2449 insertions(+), 462 deletions(-)
+ create mode 100644 components/bt/bluedroid/btc/profile/std/avrc/bta_avrc_co.c
+
+diff --git a/components/bt/CMakeLists.txt b/components/bt/CMakeLists.txt
+index 8f6d0a47c..ad63565ef 100644
+--- a/components/bt/CMakeLists.txt
++++ b/components/bt/CMakeLists.txt
+@@ -133,6 +133,7 @@ if(CONFIG_BT_ENABLED)
+                    "bluedroid/btc/profile/std/avrc/btc_avrc.c"
+                    "bluedroid/btc/profile/std/hf_client/btc_hf_client.c"
+                    "bluedroid/btc/profile/std/hf_client/bta_hf_client_co.c"
++                   "bluedroid/btc/profile/std/avrc/bta_avrc_co.c"
+                    "bluedroid/btc/profile/std/gap/btc_gap_ble.c"
+                    "bluedroid/btc/profile/std/gap/btc_gap_bt.c"
+                    "bluedroid/btc/profile/std/gatt/btc_gatt_common.c"
+diff --git a/components/bt/bluedroid/api/esp_avrc_api.c b/components/bt/bluedroid/api/esp_avrc_api.c
+index 3c80c5381..9b9e6616c 100644
+--- a/components/bt/bluedroid/api/esp_avrc_api.c
++++ b/components/bt/bluedroid/api/esp_avrc_api.c
+@@ -32,7 +32,7 @@ esp_err_t esp_avrc_ct_register_callback(esp_avrc_ct_cb_t callback)
+         return ESP_FAIL;
+     }
+ 
+-    btc_profile_cb_set(BTC_PID_AVRC, callback);
++    btc_profile_cb_set(BTC_PID_AVRC_CT, callback);
+     return ESP_OK;
+ }
+ 
+@@ -45,8 +45,8 @@ esp_err_t esp_avrc_ct_init(void)
+     btc_msg_t msg;
+ 
+     msg.sig = BTC_SIG_API_CALL;
+-    msg.pid = BTC_PID_AVRC;
+-    msg.act = BTC_AVRC_CTRL_API_INIT_EVT;
++    msg.pid = BTC_PID_AVRC_CT;
++    msg.act = BTC_AVRC_CT_API_INIT_EVT;
+ 
+     /* Switch to BTC context */
+     bt_status_t stat = btc_transfer_context(&msg, NULL, 0, NULL);
+@@ -62,8 +62,8 @@ esp_err_t esp_avrc_ct_deinit(void)
+     btc_msg_t msg;
+ 
+     msg.sig = BTC_SIG_API_CALL;
+-    msg.pid = BTC_PID_AVRC;
+-    msg.act = BTC_AVRC_CTRL_API_DEINIT_EVT;
++    msg.pid = BTC_PID_AVRC_CT;
++    msg.act = BTC_AVRC_CT_API_DEINIT_EVT;
+ 
+     /* Switch to BTC context */
+     bt_status_t stat = btc_transfer_context(&msg, NULL, 0, NULL);
+@@ -82,8 +82,8 @@ esp_err_t esp_avrc_ct_send_set_player_value_cmd(uint8_t tl, uint8_t attr_id, uin
+ 
+     btc_msg_t msg;
+     msg.sig = BTC_SIG_API_CALL;
+-    msg.pid = BTC_PID_AVRC;
+-    msg.act = BTC_AVRC_CTRL_API_SET_PLAYER_SETTING_EVT;
++    msg.pid = BTC_PID_AVRC_CT;
++    msg.act = BTC_AVRC_CTRL_API_SND_SET_PLAYER_SETTING_EVT;
+ 
+     btc_avrc_args_t arg;
+     memset(&arg, 0, sizeof(btc_avrc_args_t));
+@@ -97,6 +97,30 @@ esp_err_t esp_avrc_ct_send_set_player_value_cmd(uint8_t tl, uint8_t attr_id, uin
+     return (stat == BT_STATUS_SUCCESS) ? ESP_OK : ESP_FAIL;
+ }
+ 
++esp_err_t esp_avrc_ct_send_get_rn_capabilities_cmd(uint8_t tl)
++{
++    if (esp_bluedroid_get_status() != ESP_BLUEDROID_STATUS_ENABLED) {
++        return ESP_ERR_INVALID_STATE;
++    }
++
++    if (tl >= 16) {
++        return ESP_ERR_INVALID_ARG;
++    }
++
++    btc_msg_t msg;
++    msg.sig = BTC_SIG_API_CALL;
++    msg.pid = BTC_PID_AVRC_CT;
++    msg.act = BTC_AVRC_STATUS_API_SND_GET_RN_CAPS_EVT;
++
++    btc_avrc_args_t arg;
++    memset(&arg, 0, sizeof(btc_avrc_args_t));
++
++    arg.get_caps_cmd.tl = tl;
++
++    /* Switch to BTC context */
++    bt_status_t stat = btc_transfer_context(&msg, &arg, sizeof(btc_avrc_args_t), NULL);
++    return (stat == BT_STATUS_SUCCESS) ? ESP_OK : ESP_FAIL;
++}
+ 
+ esp_err_t esp_avrc_ct_send_register_notification_cmd(uint8_t tl, uint8_t event_id, uint32_t event_parameter)
+ {
+@@ -108,9 +132,13 @@ esp_err_t esp_avrc_ct_send_register_notification_cmd(uint8_t tl, uint8_t event_i
+         return ESP_FAIL;
+     }
+ 
++    if (!btc_avrc_ct_rn_evt_supported(event_id)) {
++        return ESP_ERR_NOT_SUPPORTED;
++    }
++
+     btc_msg_t msg;
+     msg.sig = BTC_SIG_API_CALL;
+-    msg.pid = BTC_PID_AVRC;
++    msg.pid = BTC_PID_AVRC_CT;
+     msg.act = BTC_AVRC_NOTIFY_API_SND_REG_NOTIFY_EVT;
+ 
+     btc_avrc_args_t arg;
+@@ -137,7 +165,7 @@ esp_err_t esp_avrc_ct_send_metadata_cmd(uint8_t tl, uint8_t attr_mask)
+ 
+     btc_msg_t msg;
+     msg.sig = BTC_SIG_API_CALL;
+-    msg.pid = BTC_PID_AVRC;
++    msg.pid = BTC_PID_AVRC_CT;
+     msg.act = BTC_AVRC_STATUS_API_SND_META_EVT;
+ 
+     btc_avrc_args_t arg;
+@@ -163,7 +191,7 @@ esp_err_t esp_avrc_ct_send_passthrough_cmd(uint8_t tl, uint8_t key_code, uint8_t
+ 
+     btc_msg_t msg;
+     msg.sig = BTC_SIG_API_CALL;
+-    msg.pid = BTC_PID_AVRC;
++    msg.pid = BTC_PID_AVRC_CT;
+     msg.act = BTC_AVRC_CTRL_API_SND_PTCMD_EVT;
+ 
+     btc_avrc_args_t arg;
+@@ -178,4 +206,246 @@ esp_err_t esp_avrc_ct_send_passthrough_cmd(uint8_t tl, uint8_t key_code, uint8_t
+     return (stat == BT_STATUS_SUCCESS) ? ESP_OK : ESP_FAIL;
+ }
+ 
++/*********************************************************************************************/
++/**                  following is the API of AVRCP target role                              **/
++/*********************************************************************************************/
++
++esp_err_t esp_avrc_tg_register_callback(esp_avrc_tg_cb_t callback)
++{
++    if (esp_bluedroid_get_status() != ESP_BLUEDROID_STATUS_ENABLED) {
++        return ESP_ERR_INVALID_STATE;
++    }
++
++    if (callback == NULL) {
++        return ESP_FAIL;
++    }
++
++    btc_profile_cb_set(BTC_PID_AVRC_TG, callback);
++    return ESP_OK;
++}
++
++esp_err_t esp_avrc_tg_init(void)
++{
++    if (esp_bluedroid_get_status() != ESP_BLUEDROID_STATUS_ENABLED) {
++        return ESP_ERR_INVALID_STATE;
++    }
++
++    btc_msg_t msg;
++
++    msg.sig = BTC_SIG_API_CALL;
++    msg.pid = BTC_PID_AVRC_TG;
++    msg.act = BTC_AVRC_TG_API_INIT_EVT;
++
++    /* Switch to BTC context */
++    bt_status_t stat = btc_transfer_context(&msg, NULL, 0, NULL);
++    return (stat == BT_STATUS_SUCCESS) ? ESP_OK : ESP_FAIL;
++}
++
++esp_err_t esp_avrc_tg_deinit(void)
++{
++    if (esp_bluedroid_get_status() != ESP_BLUEDROID_STATUS_ENABLED) {
++        return ESP_ERR_INVALID_STATE;
++    }
++
++    btc_msg_t msg;
++
++    msg.sig = BTC_SIG_API_CALL;
++    msg.pid = BTC_PID_AVRC_TG;
++    msg.act = BTC_AVRC_TG_API_DEINIT_EVT;
++
++    /* Switch to BTC context */
++    bt_status_t stat = btc_transfer_context(&msg, NULL, 0, NULL);
++    return (stat == BT_STATUS_SUCCESS) ? ESP_OK : ESP_FAIL;
++}
++
++bool esp_avrc_psth_bit_mask_operation(esp_avrc_bit_mask_op_t op, esp_avrc_psth_bit_mask_t *psth,
++                                      esp_avrc_pt_cmd_t cmd)
++{
++    if (!psth ||
++        cmd > ESP_AVRC_PT_CMD_VENDOR) {
++        return false;
++    }
++
++    uint16_t *p = &psth->bits[(uint8_t)cmd >> 4];
++    uint16_t mask = (uint16_t)1 << ((uint8_t)cmd & 0x0F);
++    switch (op) {
++    case ESP_AVRC_BIT_MASK_OP_SET:
++        *p |= mask;
++        break;
++    case ESP_AVRC_BIT_MASK_OP_CLEAR:
++        *p &= ~mask;
++        break;
++    case ESP_AVRC_BIT_MASK_OP_TEST:
++        return (*p & mask);
++    default:
++        return false;
++    }
++
++    return true;
++}
++
++esp_err_t esp_avrc_tg_get_psth_cmd_filter(esp_avrc_psth_filter_t filter, esp_avrc_psth_bit_mask_t *cmd_set)
++{
++    if ((esp_bluedroid_get_status() != ESP_BLUEDROID_STATUS_ENABLED) ||
++        (! btc_avrc_tg_init_p())) {
++        return ESP_ERR_INVALID_STATE;
++    }
++    if (filter >= ESP_AVRC_PSTH_FILTER_SUPPORT_MAX ||
++        cmd_set == NULL) {
++        return ESP_ERR_INVALID_ARG;
++    }
++
++    if (filter == ESP_AVRC_PSTH_FILTER_ALLOWED_CMD) {
++        const uint16_t *allowed_cmd_set = btc_avrc_tg_get_allowed_command();
++        memcpy(cmd_set, allowed_cmd_set, sizeof(esp_avrc_psth_bit_mask_t));
++    } else if (filter == ESP_AVRC_PSTH_FILTER_SUPPORTED_CMD) {
++        const uint16_t *supported_cmd_set = btc_avrc_tg_get_supported_command();
++        memcpy(cmd_set, supported_cmd_set, sizeof(esp_avrc_psth_bit_mask_t));
++    } else {
++    }
++
++    return ESP_OK;
++}
++
++esp_err_t esp_avrc_tg_set_psth_cmd_filter(esp_avrc_psth_filter_t filter, const esp_avrc_psth_bit_mask_t *cmd_set)
++{
++    if (esp_bluedroid_get_status() != ESP_BLUEDROID_STATUS_ENABLED) {
++        return ESP_ERR_INVALID_STATE;
++    }
++    if (filter >= ESP_AVRC_PSTH_FILTER_SUPPORT_MAX ||
++        cmd_set == NULL) {
++        return ESP_ERR_INVALID_ARG;
++    }
++    if (filter == ESP_AVRC_PSTH_FILTER_ALLOWED_CMD) {
++        return ESP_ERR_NOT_SUPPORTED;
++    }
++    if (filter == ESP_AVRC_PSTH_FILTER_SUPPORTED_CMD) {
++        bool allowed = btc_avrc_tg_check_supported_command(cmd_set->bits);
++        if (!allowed) {
++            return ESP_ERR_NOT_SUPPORTED;
++        }
++        btc_msg_t msg;
++        msg.sig = BTC_SIG_API_CALL;
++        msg.pid = BTC_PID_AVRC_TG;
++        msg.act = BTC_AVRC_TG_API_SET_PSTH_SUPPORTED_CMD_EVT;
++
++        btc_avrc_tg_args_t arg;
++        memset(&arg, 0, sizeof(btc_avrc_tg_args_t));
++        arg.set_psth_cmd = (uint16_t *)cmd_set->bits;
++
++        /* Switch to BTC context */
++        bt_status_t stat = btc_transfer_context(&msg, &arg, sizeof(btc_avrc_tg_args_t),
++                                                btc_avrc_tg_arg_deep_copy);
++        return (stat == BT_STATUS_SUCCESS) ? ESP_OK : ESP_FAIL;
++    } else {
++        return ESP_FAIL;
++    }
++}
++
++esp_err_t esp_avrc_tg_get_rn_evt_cap(esp_avrc_rn_evt_cap_t cap, esp_avrc_rn_evt_cap_mask_t *evt_set)
++{
++    if ((esp_bluedroid_get_status() != ESP_BLUEDROID_STATUS_ENABLED) ||
++        (! btc_avrc_tg_init_p())) {
++        return ESP_ERR_INVALID_STATE;
++    }
++    if (cap >= ESP_AVRC_RN_CAP_MAX ||
++        evt_set == NULL) {
++        return ESP_ERR_INVALID_ARG;
++    }
++
++    if (cap == ESP_AVRC_RN_CAP_ALLOWED_EVT) {
++        evt_set->bits = btc_avrc_tg_get_rn_allowed_evt();
++    } else if (cap == ESP_AVRC_RN_CAP_SUPPORTED_EVT) {
++        evt_set->bits = btc_avrc_tg_get_rn_supported_evt();
++    } else {
++    }
++
++    return ESP_OK;
++}
++
++esp_err_t esp_avrc_tg_set_rn_evt_cap(const esp_avrc_rn_evt_cap_mask_t *evt_set)
++{
++    if (esp_bluedroid_get_status() != ESP_BLUEDROID_STATUS_ENABLED) {
++        return ESP_ERR_INVALID_STATE;
++    }
++    if (evt_set == NULL) {
++        return ESP_ERR_INVALID_ARG;
++    }
++
++    bool allowed = btc_avrc_tg_check_rn_supported_evt(evt_set->bits);
++    if (!allowed) {
++        return ESP_ERR_NOT_SUPPORTED;
++    }
++
++    btc_msg_t msg;
++    msg.sig = BTC_SIG_API_CALL;
++    msg.pid = BTC_PID_AVRC_TG;
++    msg.act = BTC_AVRC_TG_API_SET_RN_SUPPORTED_EVT;
++
++    btc_avrc_tg_args_t arg;
++    memset(&arg, 0, sizeof(btc_avrc_tg_args_t));
++
++    arg.set_rn_evt = evt_set->bits;
++
++    /* Switch to BTC context */
++    bt_status_t stat = btc_transfer_context(&msg, &arg, sizeof(btc_avrc_tg_args_t), NULL);
++    return (stat == BT_STATUS_SUCCESS) ? ESP_OK : ESP_FAIL;
++}
++
++bool esp_avrc_rn_evt_bit_mask_operation(esp_avrc_bit_mask_op_t op, esp_avrc_rn_evt_cap_mask_t *events,
++                                        esp_avrc_rn_event_ids_t event_id)
++{
++    if (!events ||
++        event_id >= ESP_AVRC_RN_MAX_EVT) {
++        return false;
++    }
++
++    uint16_t *p = &events->bits;
++    uint16_t mask = (uint16_t)1 << ((uint8_t)event_id & 0x0F);
++    switch (op) {
++    case ESP_AVRC_BIT_MASK_OP_SET:
++        *p |= mask;
++        break;
++    case ESP_AVRC_BIT_MASK_OP_CLEAR:
++        *p &= ~mask;
++        break;
++    case ESP_AVRC_BIT_MASK_OP_TEST:
++        return (*p & mask);
++    default:
++        return false;
++    }
++
++    return true;
++}
++
++esp_err_t esp_avrc_tg_send_rn_rsp(esp_avrc_rn_event_ids_t event_id, esp_avrc_rn_rsp_t rsp,
++                                  esp_avrc_rn_param_t *param)
++{
++    if ((esp_bluedroid_get_status() != ESP_BLUEDROID_STATUS_ENABLED) ||
++        (! btc_avrc_tg_connected_p())) {
++        return ESP_ERR_INVALID_STATE;
++    }
++
++    if ( ! btc_avrc_tg_rn_evt_supported((uint8_t)event_id)) {
++        return ESP_ERR_NOT_SUPPORTED;
++    }
++
++    btc_msg_t msg;
++    msg.sig = BTC_SIG_API_CALL;
++    msg.pid = BTC_PID_AVRC_TG;
++    msg.act = BTC_AVRC_TG_API_SEND_RN_RSP_EVT;
++
++    btc_avrc_tg_args_t arg;
++    memset(&arg, 0, sizeof(btc_avrc_tg_args_t));
++
++    arg.rn_rsp.event_id = event_id;
++    arg.rn_rsp.rsp = rsp;
++    memcpy(&arg.rn_rsp.param, param, sizeof(esp_avrc_rn_param_t));
++
++    /* Switch to BTC context */
++    bt_status_t stat = btc_transfer_context(&msg, &arg, sizeof(btc_avrc_tg_args_t), NULL);
++    return (stat == BT_STATUS_SUCCESS) ? ESP_OK : ESP_FAIL;
++    
++}
++
+ #endif /* #if BTC_AV_INCLUDED */
+diff --git a/components/bt/bluedroid/api/include/api/esp_avrc_api.h b/components/bt/bluedroid/api/include/api/esp_avrc_api.h
+index e1f68392c..814f2be33 100644
+--- a/components/bt/bluedroid/api/include/api/esp_avrc_api.h
++++ b/components/bt/bluedroid/api/include/api/esp_avrc_api.h
+@@ -34,17 +34,97 @@ typedef enum {
+     ESP_AVRC_FEAT_ADV_CTRL = 0x0200,             /*!< remote control advanced control commmand/response */
+ } esp_avrc_features_t;
+ 
++/// AVRC supported features flag retrieved in SDP record
++typedef enum {
++    ESP_AVRC_FEAT_FLAG_CAT1 = 0x0001,                             /*!< category 1 */
++    ESP_AVRC_FEAT_FLAG_CAT2 = 0x0002,                             /*!< category 2 */
++    ESP_AVRC_FEAT_FLAG_CAT3 = 0x0004,                             /*!< category 3 */
++    ESP_AVRC_FEAT_FLAG_CAT4 = 0x0008,                             /*!< category 4 */
++    ESP_AVRC_FEAT_FLAG_BROWSING = 0x0040,                         /*!< browsing */
++    ESP_AVRC_FEAT_FLAG_COVER_ART_GET_IMAGE_PROP = 0x0080,         /*!< Cover Art GetImageProperties */
++    ESP_AVRC_FEAT_FLAG_COVER_ART_GET_IMAGE = 0x0100,              /*!< Cover Art GetImage */
++    ESP_AVRC_FEAT_FLAG_COVER_ART_GET_LINKED_THUMBNAIL = 0x0200,   /*!< Cover Art GetLinkedThumbnail */
++} esp_avrc_feature_flag_t;
++
+ /// AVRC passthrough command code
+ typedef enum {
+-    ESP_AVRC_PT_CMD_PLAY = 0x44,                 /*!< play */
+-    ESP_AVRC_PT_CMD_STOP = 0x45,                 /*!< stop */
+-    ESP_AVRC_PT_CMD_PAUSE = 0x46,                /*!< pause */
+-    ESP_AVRC_PT_CMD_FORWARD = 0x4B,              /*!< forward */
+-    ESP_AVRC_PT_CMD_BACKWARD = 0x4C,             /*!< backward */
+-    ESP_AVRC_PT_CMD_REWIND = 0x48,               /*!< rewind */
+-    ESP_AVRC_PT_CMD_FAST_FORWARD = 0x49          /*!< fast forward */
++    ESP_AVRC_PT_CMD_SELECT         =   0x00,    /*!< select */
++    ESP_AVRC_PT_CMD_UP             =   0x01,    /*!< up */
++    ESP_AVRC_PT_CMD_DOWN           =   0x02,    /*!< down */
++    ESP_AVRC_PT_CMD_LEFT           =   0x03,    /*!< left */
++    ESP_AVRC_PT_CMD_RIGHT          =   0x04,    /*!< right */
++    ESP_AVRC_PT_CMD_RIGHT_UP       =   0x05,    /*!< right-up */
++    ESP_AVRC_PT_CMD_RIGHT_DOWN     =   0x06,    /*!< right-down */
++    ESP_AVRC_PT_CMD_LEFT_UP        =   0x07,    /*!< left-up */
++    ESP_AVRC_PT_CMD_LEFT_DOWN      =   0x08,    /*!< left-down */
++    ESP_AVRC_PT_CMD_ROOT_MENU      =   0x09,    /*!< root menu */
++    ESP_AVRC_PT_CMD_SETUP_MENU     =   0x0A,    /*!< setup menu */
++    ESP_AVRC_PT_CMD_CONT_MENU      =   0x0B,    /*!< contents menu */
++    ESP_AVRC_PT_CMD_FAV_MENU       =   0x0C,    /*!< favorite menu */
++    ESP_AVRC_PT_CMD_EXIT           =   0x0D,    /*!< exit */
++    ESP_AVRC_PT_CMD_0              =   0x20,    /*!< 0 */
++    ESP_AVRC_PT_CMD_1              =   0x21,    /*!< 1 */
++    ESP_AVRC_PT_CMD_2              =   0x22,    /*!< 2 */
++    ESP_AVRC_PT_CMD_3              =   0x23,    /*!< 3 */
++    ESP_AVRC_PT_CMD_4              =   0x24,    /*!< 4 */
++    ESP_AVRC_PT_CMD_5              =   0x25,    /*!< 5 */
++    ESP_AVRC_PT_CMD_6              =   0x26,    /*!< 6 */
++    ESP_AVRC_PT_CMD_7              =   0x27,    /*!< 7 */
++    ESP_AVRC_PT_CMD_8              =   0x28,    /*!< 8 */
++    ESP_AVRC_PT_CMD_9              =   0x29,    /*!< 9 */
++    ESP_AVRC_PT_CMD_DOT            =   0x2A,    /*!< dot */
++    ESP_AVRC_PT_CMD_ENTER          =   0x2B,    /*!< enter */
++    ESP_AVRC_PT_CMD_CLEAR          =   0x2C,    /*!< clear */
++    ESP_AVRC_PT_CMD_CHAN_UP        =   0x30,    /*!< channel up */
++    ESP_AVRC_PT_CMD_CHAN_DOWN      =   0x31,    /*!< channel down */
++    ESP_AVRC_PT_CMD_PREV_CHAN      =   0x32,    /*!< previous channel */
++    ESP_AVRC_PT_CMD_SOUND_SEL      =   0x33,    /*!< sound select */
++    ESP_AVRC_PT_CMD_INPUT_SEL      =   0x34,    /*!< input select */
++    ESP_AVRC_PT_CMD_DISP_INFO      =   0x35,    /*!< display information */
++    ESP_AVRC_PT_CMD_HELP           =   0x36,    /*!< help */
++    ESP_AVRC_PT_CMD_PAGE_UP        =   0x37,    /*!< page up */
++    ESP_AVRC_PT_CMD_PAGE_DOWN      =   0x38,    /*!< page down */
++    ESP_AVRC_PT_CMD_POWER          =   0x40,    /*!< power */
++    ESP_AVRC_PT_CMD_VOL_UP         =   0x41,    /*!< volume up */
++    ESP_AVRC_PT_CMD_VOL_DOWN       =   0x42,    /*!< volume down */
++    ESP_AVRC_PT_CMD_MUTE           =   0x43,    /*!< mute */
++    ESP_AVRC_PT_CMD_PLAY           =   0x44,    /*!< play */
++    ESP_AVRC_PT_CMD_STOP           =   0x45,    /*!< stop */
++    ESP_AVRC_PT_CMD_PAUSE          =   0x46,    /*!< pause */
++    ESP_AVRC_PT_CMD_RECORD         =   0x47,    /*!< record */
++    ESP_AVRC_PT_CMD_REWIND         =   0x48,    /*!< rewind */
++    ESP_AVRC_PT_CMD_FAST_FORWARD   =   0x49,    /*!< fast forward */
++    ESP_AVRC_PT_CMD_EJECT          =   0x4A,    /*!< eject */
++    ESP_AVRC_PT_CMD_FORWARD        =   0x4B,    /*!< forward */
++    ESP_AVRC_PT_CMD_BACKWARD       =   0x4C,    /*!< backward */
++    ESP_AVRC_PT_CMD_ANGLE          =   0x50,    /*!< angle */
++    ESP_AVRC_PT_CMD_SUBPICT        =   0x51,    /*!< subpicture */
++    ESP_AVRC_PT_CMD_F1             =   0x71,    /*!< F1 */
++    ESP_AVRC_PT_CMD_F2             =   0x72,    /*!< F2 */
++    ESP_AVRC_PT_CMD_F3             =   0x73,    /*!< F3 */
++    ESP_AVRC_PT_CMD_F4             =   0x74,    /*!< F4 */
++    ESP_AVRC_PT_CMD_F5             =   0x75,    /*!< F5 */
++    ESP_AVRC_PT_CMD_VENDOR         =   0x7E,    /*!< vendor unique */
+ } esp_avrc_pt_cmd_t;
+ 
++/// AVRC passthrough command filter
++typedef enum {
++    ESP_AVRC_PSTH_FILTER_ALLOWED_CMD = 0,       /*!< all of the PASSTHROUGH commands that can possibly be used, immuateble */
++    ESP_AVRC_PSTH_FILTER_SUPPORTED_CMD = 1,     /*!< PASSTHROUGH commands selectively supported according to the current configuration */
++    ESP_AVRC_PSTH_FILTER_SUPPORT_MAX,
++} esp_avrc_psth_filter_t;
++
++/// AVRC passthrough command bit mask
++typedef struct {
++    uint16_t bits[8];                           /*!< bit mask representation of PASSTHROUGH commands */
++} esp_avrc_psth_bit_mask_t;
++
++typedef enum {
++    ESP_AVRC_BIT_MASK_OP_TEST = 0,      /*!< operation code to test a specific bit */
++    ESP_AVRC_BIT_MASK_OP_SET = 1,       /*!< operation code to set a specific bit  */
++    ESP_AVRC_BIT_MASK_OP_CLEAR = 2,     /*!< operation code to clear a specific bit */
++} esp_avrc_bit_mask_op_t;
++
+ /// AVRC passthrough command state
+ typedef enum {
+     ESP_AVRC_PT_CMD_STATE_PRESSED = 0,           /*!< key pressed */
+@@ -59,8 +139,18 @@ typedef enum {
+     ESP_AVRC_CT_PLAY_STATUS_RSP_EVT = 3,         /*!< play status response event */
+     ESP_AVRC_CT_CHANGE_NOTIFY_EVT = 4,           /*!< notification event */
+     ESP_AVRC_CT_REMOTE_FEATURES_EVT = 5,         /*!< feature of remote device indication event */
++    ESP_AVRC_CT_GET_RN_CAPABILITIES_RSP_EVT = 6,     /*!< supported notification events capability of peer device */
+ } esp_avrc_ct_cb_event_t;
+ 
++/// AVRC Target callback events
++typedef enum {
++    ESP_AVRC_TG_CONNECTION_STATE_EVT = 0,          /*!< connection state changed event */
++    ESP_AVRC_TG_REMOTE_FEATURES_EVT = 1,           /*!< feature of remote device indication event */
++    ESP_AVRC_TG_PASSTHROUGH_CMD_EVT = 2,           /*!< passthrough command event */
++    ESP_AVRC_TG_SET_ABSOLUTE_VOLUME_CMD_EVT = 3,   /*!< set absolute volume command from remote device */
++    ESP_AVRC_TG_REGISTER_NOTIFICATION_EVT = 4,     /*!< register notification event */
++} esp_avrc_tg_cb_event_t;
++
+ /// AVRC metadata attribute mask
+ typedef enum {
+     ESP_AVRC_MD_ATTR_TITLE = 0x1,                 /*!< title of the playing track */
+@@ -82,9 +172,32 @@ typedef enum {
+     ESP_AVRC_RN_BATTERY_STATUS_CHANGE = 0x06,     /*!< battery status changed */
+     ESP_AVRC_RN_SYSTEM_STATUS_CHANGE = 0x07,      /*!< system status changed */
+     ESP_AVRC_RN_APP_SETTING_CHANGE = 0x08,        /*!< application settings changed */
++    ESP_AVRC_RN_NOW_PLAYING_CHANGE = 0x09,        /*!< now playing content changed */
++    ESP_AVRC_RN_AVAILABLE_PLAYERS_CHANGE = 0x0a,  /*!< available players changed */
++    ESP_AVRC_RN_ADDRESSED_PLAYER_CHANGE = 0x0b,   /*!< the addressed player changed */
++    ESP_AVRC_RN_UIDS_CHANGE = 0x0c,               /*!< UIDs changed */
++    ESP_AVRC_RN_VOLUME_CHANGE = 0x0d,             /*!< volume changed locally on TG */
+     ESP_AVRC_RN_MAX_EVT
+ } esp_avrc_rn_event_ids_t;
+ 
++/// AVRC target notification event notification capability
++typedef enum {
++    ESP_AVRC_RN_CAP_ALLOWED_EVT = 0,              /*!< all of the notification events that can possibly be supported, immutable */
++    ESP_AVRC_RN_CAP_SUPPORTED_EVT = 1,            /*!< notification events selectively supported according to the current configuration */
++    ESP_AVRC_RN_CAP_MAX,
++} esp_avrc_rn_evt_cap_t;
++
++/// AVRC target notification event capability bit mask
++typedef struct {
++    uint16_t bits;                                /*!< bit mask representation of PASSTHROUGH commands */
++} esp_avrc_rn_evt_cap_mask_t;
++
++/// AVRC notification response type
++typedef enum {
++    ESP_AVRC_RN_RSP_INTERIM = 13,     /*!< initial response to RegisterNotification, should be sent T_mtp(1000ms) from receiving the command */
++    ESP_AVRC_RN_RSP_CHANGED = 15,     /*!< final response to RegisterNotification command */
++} esp_avrc_rn_rsp_t;
++
+ /// AVRC player setting ids
+ typedef enum {
+     ESP_AVRC_PS_EQUALIZER = 0x01,                 /*!< equalizer, on or off */
+@@ -122,6 +235,46 @@ typedef enum {
+     ESP_AVRC_PS_SCAN_GROUP = 0x3                  /*!< group scan */
+ } esp_avrc_ps_scn_value_ids_t;
+ 
++/// AVCTP response codes
++typedef enum {
++    ESP_AVRC_RSP_NOT_IMPL   = 8,                  /*!< not implemented */
++    ESP_AVRC_RSP_ACCEPT     = 9,                  /*!< accept */
++    ESP_AVRC_RSP_REJECT     = 10,                 /*!< reject */
++    ESP_AVRC_RSP_IN_TRANS   = 11,                 /*!< in transition */
++    ESP_AVRC_RSP_IMPL_STBL  = 12,                 /*!< implemented/stable */
++    ESP_AVRC_RSP_CHANGED    = 13,                 /*!< changed */
++    ESP_AVRC_RSP_INTERIM    = 15,                 /*!< interim */
++} esp_avrc_rsp_t;
++
++/// AVRCP battery status
++typedef enum {
++    ESP_AVRC_BATT_NORMAL       = 0,               /*!< normal state */
++    ESP_AVRC_BATT_WARNING      = 1,               /*!< unable to operate soon */
++    ESP_AVRC_BATT_CRITICAL     = 2,               /*!< cannot operate any more */
++    ESP_AVRC_BATT_EXTERNAL     = 3,               /*!< plugged to external power supply */
++    ESP_AVRC_BATT_FULL_CHARGE  = 4,               /*!< when completely charged from external power supply */
++} esp_avrc_batt_stat_t;
++
++/// AVRCP current status of playback
++typedef enum {
++    ESP_AVRC_PLAYBACK_STOPPED = 0,                /*!< stopped */
++    ESP_AVRC_PLAYBACK_PLAYING = 1,                /*!< playing */
++    ESP_AVRC_PLAYBACK_PAUSED = 2,                 /*!< paused */
++    ESP_AVRC_PLAYBACK_FWD_SEEK = 3,               /*!< forward seek */
++    ESP_AVRC_PLAYBACK_REV_SEEK = 4,               /*!< reverse seek */
++    ESP_AVRC_PLAYBACK_ERROR = 0xFF,               /*!< error */
++} esp_avrc_playback_stat_t;
++
++/// AVRCP notification parameters
++typedef union
++{
++    uint8_t volume;                          /*!< response data for ESP_AVRC_RN_VOLUME_CHANGE, ranges 0..127 */
++    esp_avrc_playback_stat_t playback;       /*!< response data for ESP_AVRC_RN_PLAY_STATUS_CHANGE */
++    uint8_t elm_id[8];                       /*!< response data for ESP_AVRC_RN_TRACK_CHANGE */
++    uint32_t play_pos;                       /*!< response data for ESP_AVRC_RN_PLAY_POS_CHANGED, in millisecond */
++    esp_avrc_batt_stat_t batt;               /*!< response data for ESP_AVRC_RN_BATTERY_STATUS_CHANGE */
++} esp_avrc_rn_param_t;
++
+ /// AVRC controller callback parameters
+ typedef union {
+     /**
+@@ -155,7 +308,7 @@ typedef union {
+      */
+     struct avrc_ct_change_notify_param {
+         uint8_t event_id;                        /*!< id of AVRC event notification */
+-        uint32_t event_parameter;                /*!< event notification parameter */
++        esp_avrc_rn_param_t event_parameter;     /*!< event notification parameter */
+     } change_ntf;                                /*!< notifications */
+ 
+     /**
+@@ -163,11 +316,61 @@ typedef union {
+      */
+     struct avrc_ct_rmt_feats_param {
+         uint32_t feat_mask;                      /*!< AVRC feature mask of remote device */
++        uint16_t tg_feat_flag;                   /*!< feature flag of remote device as TG */
+         esp_bd_addr_t remote_bda;                /*!< remote bluetooth device address */
+     } rmt_feats;                                 /*!< AVRC features discovered from remote SDP server */
+-    
++
++    /**
++     * @brief ESP_AVRC_CT_GET_RN_CAPABILITIES_RSP_EVT
++     */
++    struct avrc_ct_get_rn_caps_rsp_param {
++        uint8_t cap_count;                       /*!< number of items provided in event or company_id according to cap_id used */
++        esp_avrc_rn_evt_cap_mask_t evt_set;      /*!< supported event_ids represented in bit-mask */
++    } get_rn_caps_rsp;                           /*!< get supported event capabilities response from AVRCP target */
+ } esp_avrc_ct_cb_param_t;
+ 
++/// AVRC target callback parameters
++typedef union {
++    /**
++     * @brief ESP_AVRC_TG_CONNECTION_STATE_EVT
++     */
++    struct avrc_tg_conn_stat_param {
++        bool connected;                          /*!< whether AVRC connection is set up */
++        esp_bd_addr_t remote_bda;                /*!< remote bluetooth device address */
++    } conn_stat;                                 /*!< AVRC connection status */
++
++    /**
++     * @brief ESP_AVRC_TG_REMOTE_FEATURES_EVT
++     */
++    struct avrc_tg_rmt_feats_param {
++        uint32_t feat_mask;                      /*!< AVRC feature mask of remote device */
++        uint16_t ct_feat_flag;                   /*!< feature flag of remote device as CT */
++        esp_bd_addr_t remote_bda;                /*!< remote bluetooth device address */
++    } rmt_feats;                                 /*!< AVRC features discovered through SDP */
++
++    /**
++     * @brief ESP_AVRC_TG_PASSTHROUGH_CMD_EVT
++     */
++    struct avrc_tg_psth_cmd_param {
++        uint8_t key_code;                        /*!< passthrough command code */
++        uint8_t key_state;                       /*!< 0 for PRESSED, 1 for RELEASED */
++    } psth_cmd;                                  /*!< passthrough command */
++
++    /**
++     * @brief ESP_AVRC_TG_SET_ABSOLUTE_VOLUME_CMD_EVT
++     */
++    struct avrc_tg_set_abs_vol_param {
++        uint8_t volume;                          /*!< volume ranges from 0 to 127 */
++    } set_abs_vol;                               /*!< set absolute volume command targeted on audio sink */
++
++    /**
++     * @brief ESP_AVRC_TG_REGISTER_NOTIFICATION_EVT
++     */
++    struct avrc_tg_reg_ntf_param {
++        uint8_t event_id;                        /*!< event id of AVRC RegisterNotification */
++        uint32_t event_parameter;                /*!< event notification parameter */
++    } reg_ntf;                                   /*!< register notification */
++} esp_avrc_tg_cb_param_t;
+ 
+ /**
+  * @brief           AVRCP controller callback function type
+@@ -176,23 +379,28 @@ typedef union {
+  */
+ typedef void (* esp_avrc_ct_cb_t)(esp_avrc_ct_cb_event_t event, esp_avrc_ct_cb_param_t *param);
+ 
++/**
++ * @brief           AVRCP target callback function type
++ * @param           event : Event type
++ * @param           param : Pointer to callback parameter union
++ */
++typedef void (* esp_avrc_tg_cb_t)(esp_avrc_tg_cb_event_t event, esp_avrc_tg_cb_param_t *param);
++
+ 
+ /**
+- * @brief           Register application callbacks to AVRCP module; for now only AVRCP Controller
+- *                  role is supported. This function should be called after esp_bluedroid_enable()
+- *                  completes successfully
++ * @brief           Register application callbacks to AVRCP module. This function should be
++ *                  called after esp_bluedroid_enable() completes successfully
+  *
+  * @param[in]       callback: AVRCP controller callback function
+  *
+  * @return
+  *                  - ESP_OK: success
+- *                  - ESP_INVALID_STATE: if bluetooth stack is not yet enabled
++ *                  - ESP_ERR_INVALID_STATE: if bluetooth stack is not yet enabled
+  *                  - ESP_FAIL: others
+  *
+  */
+ esp_err_t esp_avrc_ct_register_callback(esp_avrc_ct_cb_t callback);
+ 
+-
+ /**
+  *
+  * @brief           Initialize the bluetooth AVRCP controller module, This function should be called
+@@ -200,13 +408,12 @@ esp_err_t esp_avrc_ct_register_callback(esp_avrc_ct_cb_t callback);
+  *
+  * @return
+  *                  - ESP_OK: success
+- *                  - ESP_INVALID_STATE: if bluetooth stack is not yet enabled
++ *                  - ESP_ERR_INVALID_STATE: if bluetooth stack is not yet enabled
+  *                  - ESP_FAIL: others
+  *
+  */
+ esp_err_t esp_avrc_ct_init(void);
+ 
+-
+ /**
+  *
+  * @brief           De-initialize AVRCP controller module. This function should be called after
+@@ -214,7 +421,7 @@ esp_err_t esp_avrc_ct_init(void);
+  *
+  * @return
+  *                  - ESP_OK: success
+- *                  - ESP_INVALID_STATE: if bluetooth stack is not yet enabled
++ *                  - ESP_ERR_INVALID_STATE: if bluetooth stack is not yet enabled
+  *                  - ESP_FAIL: others
+  */
+ esp_err_t esp_avrc_ct_deinit(void);
+@@ -229,11 +436,24 @@ esp_err_t esp_avrc_ct_deinit(void);
+  * @param[in]       value_id : attribute value defined for the specific player application setting attribute
+  * @return
+  *                  - ESP_OK: success
+- *                  - ESP_INVALID_STATE: if bluetooth stack is not yet enabled
++ *                  - ESP_ERR_INVALID_STATE: if bluetooth stack is not yet enabled
+  *                  - ESP_FAIL: others
+  */
+ esp_err_t esp_avrc_ct_send_set_player_value_cmd(uint8_t tl, uint8_t attr_id, uint8_t value_id);
+ 
++/**
++ * @brief           Send GetCapabilities PDU to AVRCP target to retrieve remote device's supported
++ *                  notification event_ids. This function should be called after
++ *                  ESP_AVRC_CT_CONNECTION_STATE_EVT is received and AVRCP connection is established
++ *
++ * @param[in]       tl : transaction label, 0 to 15, consecutive commands should use different values.
++ * @return
++ *                  - ESP_OK: success
++ *                  - ESP_ERR_INVALID_STATE: if bluetooth stack is not yet enabled
++ *                  - ESP_FAIL: others
++ */
++esp_err_t esp_avrc_ct_send_get_rn_capabilities_cmd(uint8_t tl);
++
+ /**
+  * @brief           Send register notification command to AVRCP target, This function should be called after
+  *                  ESP_AVRC_CT_CONNECTION_STATE_EVT is received and AVRCP connection is established
+@@ -243,7 +463,8 @@ esp_err_t esp_avrc_ct_send_set_player_value_cmd(uint8_t tl, uint8_t attr_id, uin
+  * @param[in]       event_parameter : special parameters, eg. playback interval for ESP_AVRC_RN_PLAY_POS_CHANGED
+  * @return
+  *                  - ESP_OK: success
+- *                  - ESP_INVALID_STATE: if bluetooth stack is not yet enabled
++ *                  - ESP_ERR_INVALID_STATE: if bluetooth stack is not yet enabled
++ *                  - ESP_ERR_NOT_SUPPORTED: if the event_id is not supported in current implementation
+  *                  - ESP_FAIL: others
+  */
+ esp_err_t esp_avrc_ct_send_register_notification_cmd(uint8_t tl, uint8_t event_id, uint32_t event_parameter);
+@@ -258,7 +479,7 @@ esp_err_t esp_avrc_ct_send_register_notification_cmd(uint8_t tl, uint8_t event_i
+  *
+  * @return
+  *                  - ESP_OK: success
+- *                  - ESP_INVALID_STATE: if bluetooth stack is not yet enabled
++ *                  - ESP_ERR_INVALID_STATE: if bluetooth stack is not yet enabled
+  *                  - ESP_FAIL: others
+  */
+ esp_err_t esp_avrc_ct_send_metadata_cmd(uint8_t tl, uint8_t attr_mask);
+@@ -275,12 +496,176 @@ esp_err_t esp_avrc_ct_send_metadata_cmd(uint8_t tl, uint8_t attr_mask);
+  *
+  * @return
+  *                  - ESP_OK: success
+- *                  - ESP_INVALID_STATE: if bluetooth stack is not yet enabled
++ *                  - ESP_ERR_INVALID_STATE: if bluetooth stack is not yet enabled
+  *                  - ESP_FAIL: others
+  */
+ esp_err_t esp_avrc_ct_send_passthrough_cmd(uint8_t tl, uint8_t key_code, uint8_t key_state);
+ 
+ 
++/**
++ * @brief           Register application callbacks to AVRCP target module; This function should be
++ *                  called after esp_bluedroid_enable() completes successfully
++ *
++ * @param[in]       callback: AVRCP target callback function
++ *
++ * @return
++ *                  - ESP_OK: success
++ *                  - ESP_ERR_INVALID_STATE: if bluetooth stack is not yet enabled
++ *                  - ESP_FAIL: others
++ *
++ */
++esp_err_t esp_avrc_tg_register_callback(esp_avrc_tg_cb_t callback);
++
++/**
++ *
++ * @brief           Initialize the bluetooth AVRCP target module, This function should be called
++ *                  after esp_bluedroid_enable() completes successfully
++ *
++ * @return
++ *                  - ESP_OK: success
++ *                  - ESP_ERR_INVALID_STATE: if bluetooth stack is not yet enabled
++ *                  - ESP_FAIL: others
++ *
++ */
++esp_err_t esp_avrc_tg_init(void);
++
++/**
++ *
++ * @brief           De-initialize AVRCP target module. This function should be called after
++ *                  after esp_bluedroid_enable() completes successfully
++ *
++ * @return
++ *                  - ESP_OK: success
++ *                  - ESP_ERR_INVALID_STATE: if bluetooth stack is not yet enabled
++ *                  - ESP_FAIL: others
++ */
++esp_err_t esp_avrc_tg_deinit(void);
++
++/**
++ *
++ * @brief           Get the current filter of remote passthrough commands on AVRC target. Filter is given by
++ *                  filter type and bit mask for the passthrough commands. This function should be called
++ *                  after esp_avrc_tg_init().
++ *                  For filter type ESP_AVRC_PSTH_FILTER_ALLOWED_CMD, the retrieved command set is constant and
++ *                  it covers all of the passthrough commands that can possibly be supported.
++ *                  For filter type ESP_AVRC_PSTH_FILTER_SUPPORT_COMMANDS, the retrieved command set covers the
++ *                  passthrough commands selected to be supported according to current configuration. The
++ *                  configuration can be changed using esp_avrc_tg_set_psth_cmd_filter()
++ *
++ * @return
++ *                  - ESP_OK: success
++ *                  - ESP_ERR_INVALID_STATE: if bluetooth stack is not enabled or AVRC TG is not initialized
++ *                  - ESP_ERR_INVALID_ARG: if filter type is invalid or cmd_set is NULL
++ *                  - ESP_FAIL: otherwise
++ */
++esp_err_t esp_avrc_tg_get_psth_cmd_filter(esp_avrc_psth_filter_t filter, esp_avrc_psth_bit_mask_t *cmd_set);
++
++/**
++ *
++ * @brief           Set the filter of remote passthrough commands on AVRC target. Filter is given by 
++ *                  filter type and bit mask for the passthrough commands. This function should be called 
++ *                  after esp_avrc_tg_init().
++ *                  If filter type is ESP_AVRC_PSTH_FILTER_SUPPORT_CMD, the passthrough commands which
++ *                  are set "1" as given in cmd_set will generate ESP_AVRC_CT_PASSTHROUGH_RSP_EVT callback 
++ *                  event and are auto-accepted in the protocol stack, other commands are replied with response
++ *                  type "NOT IMPLEMENTED" (8). The set of supported commands should be a subset of allowed 
++ *                  command set. The allowed command set can be retrieved using esp_avrc_tg_get_psth_cmd_filter() 
++ *                  with filter type "ESP_AVRC_PSTH_FILTER_ALLOWED_CMD".
++ *                  
++ *                  Filter type "ESP_AVRC_PSTH_FILTER_ALLOWED_CMD" does not apply to this function
++ * @return
++ *                  - ESP_OK: success
++ *                  - ESP_ERR_INVALID_STATE: if bluetooth stack is not enabled
++ *                  - ESP_ERR_INVALID_ARG: if filter type is invalid or cmd_set is NULL
++ *                  - ESP_ERR_NOT_SUPPORTED:: if filter type is ESP_AVRC_PSTH_FILTER_ALLOWED_CMD, or cmd_set 
++ *                    includes unallowed commands
++ *
++ */
++esp_err_t esp_avrc_tg_set_psth_cmd_filter(esp_avrc_psth_filter_t filter, const esp_avrc_psth_bit_mask_t *cmd_set);
++
++/**
++ * @brief           Operate on the type esp_avrc_psth_bit_mask_t with regard to a specific PASSTHROUGH command
++ * @param[in]       op: operation requested on the bit mask field
++ * @param[in]       psth: pointer to passthrough command bit mask structure
++ * @param[in]       cmd: passthrough command code
++ *
++ * @return          For operation ESP_AVRC_BIT_MASK_OP_SET or ESP_AVRC_BIT_MASK_OP_CLEAR, return
++ *                  true for a successful operation, otherwise return false
++ *                  For operation ESP_AVRC_BIT_MASK_OP_TEST, return true if the corresponding bit
++ *                  is set, otherwise false
++ *
++ */
++bool esp_avrc_psth_bit_mask_operation(esp_avrc_bit_mask_op_t op, esp_avrc_psth_bit_mask_t *psth,
++                                      esp_avrc_pt_cmd_t cmd);
++
++/**
++ *
++ * @brief           Get the requested event notification capabilies on local AVRC target. The capability is returned
++ *                  in a bit mask representation in evt_set. This function should be called after 
++ *                  esp_avrc_tg_init().
++ *                  For capability type "ESP_AVRC_RN_CAP_ALLOWED_EVT, the retrieved event set is constant and
++ *                  it covers all of the notifcation events that can possibly be supported with current 
++ *                  implementation.
++ *                  For capability type ESP_AVRC_RN_CAP_SUPPORTED_EVT, the event set covers the notification
++ *                  events selected to be supported under current configuration, The configuration can be 
++ *                  changed using esp_avrc_tg_set_rn_evt_cap()
++ *
++ * @return
++ *                  - ESP_OK: success
++ *                  - ESP_ERR_INVALID_STATE: if bluetooth stack is not enabled or AVRC TG is not initialized
++ *                  - ESP_ERR_INVALID_ARG: if cap is invalid or evt_set is NULL
++ *                  - ESP_FAIL: otherwise
++ */
++esp_err_t esp_avrc_tg_get_rn_evt_cap(esp_avrc_rn_evt_cap_t cap, esp_avrc_rn_evt_cap_mask_t *evt_set);
++
++/**
++ *
++ * @brief           Set the event notification capabilities on local AVRCP target. The capability is given in a
++ *                  bit mask representation in evt_set and must be a subset of allowed event IDs with current
++ *                  implementation. This function should be called after esp_avrc_tg_init().
++ *
++ * @return
++ *                  - ESP_OK: success
++ *                  - ESP_ERR_INVALID_STATE: if bluetooth stack is not enabled
++ *                  - ESP_ERR_INVALID_ARG: if evt_set is NULL
++ *
++ */
++esp_err_t esp_avrc_tg_set_rn_evt_cap(const esp_avrc_rn_evt_cap_mask_t *evt_set);
++
++/**
++ * @brief           Operate on the type esp_avrc_rn_evt_cap_mask_t with regard to a specific event
++ * @param[in]       op: operation requested on the bit mask field
++ * @param[in]       events: pointer to event notification capability bit mask structure
++ * @param[in]       event_id: notification event code
++ *
++ * @return          For operation ESP_AVRC_BIT_MASK_OP_SET or ESP_AVRC_BIT_MASK_OP_CLEAR, return
++ *                  true for a successful operation, otherwise return false
++ *                  For operation ESP_AVRC_BIT_MASK_OP_TEST, return true if the corresponding bit
++ *                  is set, otherwise false
++ *
++ */
++bool esp_avrc_rn_evt_bit_mask_operation(esp_avrc_bit_mask_op_t op, esp_avrc_rn_evt_cap_mask_t *events,
++                                        esp_avrc_rn_event_ids_t event_id);
++
++/**
++ *
++ * @brief           Send RegisterNotification Response to remote AVRCP controller. Local event notification
++ *                  capability can be set using esp_avrc_tg_set_rn_evt_cap(),
++ *                  in a bit mask representation in evt_set. This function should be called after
++ *                  esp_avrc_tg_init() 
++ * @param[in]       event_id: notification event ID that remote AVRCP CT registers
++ * @param[in]       rsp: notification response code
++ * @param[in]       param: parameters included in the specific notification
++ *
++ * @return
++ *                  - ESP_OK: success
++ *                  - ESP_ERR_INVALID_STATE: if bluetooth stack is not enabled or AVRC TG is not initialized
++ *                  - ESP_ERR_INVALID_ARG: if evt_set is NULL
++ *
++ */
++esp_err_t esp_avrc_tg_send_rn_rsp(esp_avrc_rn_event_ids_t event_id, esp_avrc_rn_rsp_t rsp,
++                                  esp_avrc_rn_param_t *param);
++
+ #ifdef __cplusplus
+ }
+ #endif
+diff --git a/components/bt/bluedroid/bta/av/bta_av_aact.c b/components/bt/bluedroid/bta/av/bta_av_aact.c
+index 27970a990..52f0809ab 100644
+--- a/components/bt/bluedroid/bta/av/bta_av_aact.c
++++ b/components/bt/bluedroid/bta/av/bta_av_aact.c
+@@ -73,26 +73,6 @@ enum {
+     BTA_AV_CLOSING_SST
+ };
+ 
+-
+-/* the call out functions for audio stream */
+-/* const tBTA_AV_CO_FUNCTS bta_av_a2d_cos =
+-{
+-    bta_av_co_audio_init,
+-    bta_av_co_audio_disc_res,
+-    bta_av_co_audio_getconfig,
+-    bta_av_co_audio_setconfig,
+-    bta_av_co_audio_open,
+-    bta_av_co_audio_close,
+-    bta_av_co_audio_start,
+-    bta_av_co_audio_stop,
+-    bta_av_co_audio_src_data_path,
+-    bta_av_co_audio_delay
+-};
+-*/
+-tBTA_AV_CO_FUNCTS *p_bta_av_a2d_cos = NULL;
+-
+-
+-
+ /* ssm action functions for audio stream */
+ const tBTA_AV_SACT bta_av_a2d_action[] = {
+     bta_av_do_disc_a2d,     /* BTA_AV_DO_DISC  */
+diff --git a/components/bt/bluedroid/bta/av/bta_av_act.c b/components/bt/bluedroid/bta/av/bta_av_act.c
+index 195af55a1..bc5484add 100644
+--- a/components/bt/bluedroid/bta/av/bta_av_act.c
++++ b/components/bt/bluedroid/bta/av/bta_av_act.c
+@@ -335,6 +335,8 @@ UINT8 bta_av_rc_create(tBTA_AV_CB *p_cb, UINT8 role, UINT8 shdl, UINT8 lidx)
+     p_rcb->shdl = shdl;
+     p_rcb->lidx = lidx;
+     p_rcb->peer_features = 0;
++    p_rcb->peer_ct_features = 0;
++    p_rcb->peer_tg_features = 0;
+     if (lidx == (BTA_AV_NUM_LINKS + 1)) {
+         /* this LIDX is reserved for the AVRCP ACP connection */
+         p_cb->rc_acp_handle = p_rcb->handle;
+@@ -397,22 +399,13 @@ static tBTA_AV_CODE bta_av_group_navi_supported(UINT8 len, UINT8 *p_data, BOOLEA
+ static tBTA_AV_CODE bta_av_op_supported(tBTA_AV_RC rc_id, BOOLEAN is_inquiry)
+ {
+     tBTA_AV_CODE ret_code = BTA_AV_RSP_NOT_IMPL;
++    BOOLEAN rc_id_allowed = FALSE;
++    if (bta_av_cb.p_rc_cos && bta_av_cb.p_rc_cos->rc_cmd) {
++        rc_id_allowed = bta_av_cb.p_rc_cos->rc_cmd(rc_id);
++    }
+ 
+-    if (p_bta_av_rc_id) {
+-        if (is_inquiry) {
+-            if (p_bta_av_rc_id[rc_id >> 4] & (1 << (rc_id & 0x0F))) {
+-                ret_code = BTA_AV_RSP_IMPL_STBL;
+-            }
+-        } else {
+-            if (p_bta_av_rc_id[rc_id >> 4] & (1 << (rc_id & 0x0F))) {
+-                ret_code = BTA_AV_RSP_ACCEPT;
+-            } else if ((p_bta_av_cfg->rc_pass_rsp == BTA_AV_RSP_INTERIM) && p_bta_av_rc_id_ac) {
+-                if (p_bta_av_rc_id_ac[rc_id >> 4] & (1 << (rc_id & 0x0F))) {
+-                    ret_code = BTA_AV_RSP_INTERIM;
+-                }
+-            }
+-        }
+-
++    if (rc_id_allowed == TRUE) {
++        ret_code = is_inquiry ? BTA_AV_RSP_IMPL_STBL : BTA_AV_RSP_ACCEPT;
+     }
+     return ret_code;
+ }
+@@ -529,6 +522,8 @@ void bta_av_rc_opened(tBTA_AV_CB *p_cb, tBTA_AV_DATA *p_data)
+ 
+     bdcpy(rc_open.peer_addr, p_data->rc_conn_chg.peer_addr);
+     rc_open.peer_features = p_cb->rcb[i].peer_features;
++    rc_open.peer_ct_features = p_cb->rcb[i].peer_ct_features;
++    rc_open.peer_tg_features = p_cb->rcb[i].peer_tg_features;
+     rc_open.sdp_disc_done = TRUE;
+     rc_open.status = BTA_AV_SUCCESS;
+     APPL_TRACE_DEBUG("local features:x%x peer_features:x%x", p_cb->features,
+@@ -687,7 +682,6 @@ void bta_av_rc_free_msg (tBTA_AV_CB *p_cb, tBTA_AV_DATA *p_data)
+ static tAVRC_STS bta_av_chk_notif_evt_id(tAVRC_MSG_VENDOR *p_vendor)
+ {
+     tAVRC_STS   status = BTA_AV_STS_NO_RSP;
+-    UINT8       xx;
+     UINT16      u16;
+     UINT8       *p = p_vendor->p_vendor_data + 2;
+ 
+@@ -696,15 +690,13 @@ static tAVRC_STS bta_av_chk_notif_evt_id(tAVRC_MSG_VENDOR *p_vendor)
+     if ((u16 != 5) || (p_vendor->vendor_len != 9)) {
+         status = AVRC_STS_INTERNAL_ERR;
+     } else {
+-        /* make sure the player_id is valid */
+-        for (xx = 0; xx < p_bta_av_cfg->num_evt_ids; xx++) {
+-            if (*p == p_bta_av_cfg->p_meta_evt_ids[xx]) {
+-                break;
++        /* make sure the event_id is valid */
++        status = AVRC_STS_BAD_PARAM;
++        if (bta_av_cb.p_rc_cos && bta_av_cb.p_rc_cos->rn_evt_supported) {
++            if (bta_av_cb.p_rc_cos->rn_evt_supported(*p) == TRUE) {
++                status = BTA_AV_STS_NO_RSP;
+             }
+         }
+-        if (xx == p_bta_av_cfg->num_evt_ids) {
+-            status = AVRC_STS_BAD_PARAM;
+-        }
+     }
+ 
+     return status;
+@@ -763,9 +755,12 @@ tBTA_AV_EVT bta_av_proc_meta_cmd(tAVRC_RESPONSE  *p_rc_rsp, tBTA_AV_RC_MSG *p_ms
+                            (p_bta_av_cfg->num_co_ids << 2));
+                 } else if (u8 == AVRC_CAP_EVENTS_SUPPORTED) {
+                     *p_ctype = AVRC_RSP_IMPL_STBL;
+-                    p_rc_rsp->get_caps.count = p_bta_av_cfg->num_evt_ids;
+-                    memcpy(p_rc_rsp->get_caps.param.event_id, p_bta_av_cfg->p_meta_evt_ids,
+-                           p_bta_av_cfg->num_evt_ids);
++                    if (bta_av_cb.p_rc_cos && bta_av_cb.p_rc_cos->rn_evt_cap) {
++                        p_rc_rsp->get_caps.count = bta_av_cb.p_rc_cos->rn_evt_cap(
++                            p_rc_rsp->get_caps.param.event_id);
++                    } else {
++                        p_rc_rsp->get_caps.count = 0;
++                    }
+                 } else {
+                     APPL_TRACE_DEBUG("Invalid capability ID: 0x%x", u8);
+                     /* reject - unknown capability ID */
+@@ -774,7 +769,6 @@ tBTA_AV_EVT bta_av_proc_meta_cmd(tAVRC_RESPONSE  *p_rc_rsp, tBTA_AV_RC_MSG *p_ms
+             }
+             break;
+ 
+-
+         case AVRC_PDU_REGISTER_NOTIFICATION:
+             /* make sure the event_id is implemented */
+             p_rc_rsp->rsp.status = bta_av_chk_notif_evt_id (p_vendor);
+@@ -783,6 +777,12 @@ tBTA_AV_EVT bta_av_proc_meta_cmd(tAVRC_RESPONSE  *p_rc_rsp, tBTA_AV_RC_MSG *p_ms
+             }
+             break;
+ 
++        case AVRC_PDU_SET_ABSOLUTE_VOLUME:
++            p_rc_rsp->rsp.status = BTA_AV_STS_NO_RSP;
++            break;
++        default:
++            APPL_TRACE_WARNING("%s unhandled RC vendor PDU: 0x%x", __FUNCTION__, pdu);
++            break;
+         }
+     }
+ #else
+@@ -857,6 +857,10 @@ void bta_av_rc_msg(tBTA_AV_CB *p_cb, tBTA_AV_DATA *p_data)
+                 av.remote_cmd.label = p_data->rc_msg.label;
+             }
+         }
++        /* else if this is a pass thru respone that TG doesn't implement thie command */
++        else if (p_data->rc_msg.msg.hdr.ctype == AVRC_RSP_NOT_IMPL) {
++            /* do nothing, no need to setup for callback */
++        }
+         /* else if this is a pass thru response */
+         else if (p_data->rc_msg.msg.hdr.ctype >= AVRC_RSP_ACCEPT) {
+             /* set up for callback */
+@@ -1484,15 +1488,15 @@ static void bta_av_acp_sig_timer_cback (TIMER_LIST_ENT *p_tle)
+ 
+ /*******************************************************************************
+ **
+-** Function         bta_av_check_peer_features
++** Function         bta_av_check_peer_rc_features
+ **
+-** Description      check supported features on the peer device from the SDP record
+-**                  and return the feature mask
++** Description      check supported AVRC features on the peer device from the SDP
++**                  record and return the feature mask
+ **
+ ** Returns          tBTA_AV_FEAT peer device feature mask
+ **
+ *******************************************************************************/
+-tBTA_AV_FEAT bta_av_check_peer_features (UINT16 service_uuid)
++tBTA_AV_FEAT bta_av_check_peer_rc_features (UINT16 service_uuid, UINT16 *rc_features)
+ {
+     tBTA_AV_FEAT peer_features = 0;
+     tBTA_AV_CB   *p_cb = &bta_av_cb;
+@@ -1501,7 +1505,7 @@ tBTA_AV_FEAT bta_av_check_peer_features (UINT16 service_uuid)
+     UINT16              peer_rc_version = 0;
+     UINT16              categories = 0;
+ 
+-    APPL_TRACE_DEBUG("bta_av_check_peer_features service_uuid:x%x", service_uuid);
++    APPL_TRACE_DEBUG("bta_av_check_peer_rc features service_uuid:x%x", service_uuid);
+     /* loop through all records we found */
+     while (TRUE) {
+         /* get next record; if none found, we're done */
+@@ -1541,7 +1545,12 @@ tBTA_AV_FEAT bta_av_check_peer_features (UINT16 service_uuid)
+             }
+         }
+     }
+-    APPL_TRACE_DEBUG("peer_features:x%x", peer_features);
++
++    if (rc_features) {
++        *rc_features = categories;
++    }
++
++    APPL_TRACE_DEBUG("peer_features:x%x, rc:x%x", peer_features, categories);
+     return peer_features;
+ }
+ 
+@@ -1564,6 +1573,8 @@ void bta_av_rc_disc_done(tBTA_AV_DATA *p_data)
+     tBTA_AV_RC_FEAT rc_feat;
+     UINT8               rc_handle;
+     tBTA_AV_FEAT        peer_features;  /* peer features mask */
++    UINT16              peer_ct_features;  /* peer features mask as controller */
++    UINT16              peer_tg_features;  /* peer features mask as target */
+     UNUSED(p_data);
+ 
+     APPL_TRACE_DEBUG("bta_av_rc_disc_done disc:x%x", p_cb->disc);
+@@ -1589,17 +1600,13 @@ void bta_av_rc_disc_done(tBTA_AV_DATA *p_data)
+ 
+     APPL_TRACE_DEBUG("rc_handle %d", rc_handle);
+     /* check peer version and whether support CT and TG role */
+-    peer_features = bta_av_check_peer_features (UUID_SERVCLASS_AV_REMOTE_CONTROL);
+-    if ((p_cb->features & BTA_AV_FEAT_ADV_CTRL) && ((peer_features & BTA_AV_FEAT_ADV_CTRL) == 0)) {
+-        /* if we support advance control and peer does not, check their support on TG role
+-         * some implementation uses 1.3 on CT ans 1.4 on TG */
+-        peer_features |= bta_av_check_peer_features (UUID_SERVCLASS_AV_REM_CTRL_TARGET);
+-    }
++    peer_features = bta_av_check_peer_rc_features (UUID_SERVCLASS_AV_REMOTE_CONTROL, &peer_ct_features);
++    peer_features |= bta_av_check_peer_rc_features (UUID_SERVCLASS_AV_REM_CTRL_TARGET, &peer_tg_features);
+ 
+     p_cb->disc = 0;
+     utl_freebuf((void **) &p_cb->p_disc_db);
+ 
+-    APPL_TRACE_DEBUG("peer_features 0x%x, features 0x%x", peer_features, p_cb->features);
++    APPL_TRACE_DEBUG("peer_features 0x%x, local features 0x%x", peer_features, p_cb->features);
+ 
+     /* if we have no rc connection */
+     if (rc_handle == BTA_AV_RC_HANDLE_NONE) {
+@@ -1611,6 +1618,8 @@ void bta_av_rc_disc_done(tBTA_AV_DATA *p_data)
+                 if (p_lcb) {
+                     rc_handle = bta_av_rc_create(p_cb, AVCT_INT, (UINT8)(p_scb->hdi + 1), p_lcb->lidx);
+                     p_cb->rcb[rc_handle].peer_features = peer_features;
++                    p_cb->rcb[rc_handle].peer_ct_features = peer_ct_features;
++                    p_cb->rcb[rc_handle].peer_tg_features = peer_tg_features;
+                 }
+ #if (BT_USE_TRACES == TRUE || BT_TRACE_APPL == TRUE)
+                 else {
+@@ -1631,6 +1640,8 @@ void bta_av_rc_disc_done(tBTA_AV_DATA *p_data)
+         p_cb->rcb[rc_handle].peer_features = peer_features;
+         rc_feat.rc_handle =  rc_handle;
+         rc_feat.peer_features = peer_features;
++        rc_feat.peer_ct_features = peer_ct_features;
++        rc_feat.peer_tg_features = peer_tg_features;
+         (*p_cb->p_cback)(BTA_AV_RC_FEAT_EVT, (tBTA_AV *) &rc_feat);
+     }
+ }
+@@ -1665,6 +1676,8 @@ void bta_av_rc_closed(tBTA_AV_DATA *p_data)
+             rc_close.rc_handle = i;
+             p_rcb->status &= ~BTA_AV_RC_CONN_MASK;
+             p_rcb->peer_features = 0;
++            p_rcb->peer_ct_features = 0;
++            p_rcb->peer_tg_features = 0;
+             APPL_TRACE_DEBUG("       shdl:%d, lidx:%d", p_rcb->shdl, p_rcb->lidx);
+             if (p_rcb->shdl) {
+                 if ((p_rcb->shdl - 1) < BTA_AV_NUM_STRS) {
+diff --git a/components/bt/bluedroid/bta/av/bta_av_api.c b/components/bt/bluedroid/bta/av/bta_av_api.c
+index a0daa89f1..2876fb1e2 100644
+--- a/components/bt/bluedroid/bta/av/bta_av_api.c
++++ b/components/bt/bluedroid/bta/av/bta_av_api.c
+@@ -105,7 +105,9 @@ void BTA_AvDisable(void)
+ ** Returns          void
+ **
+ *******************************************************************************/
+-void BTA_AvRegister(tBTA_AV_CHNL chnl, const char *p_service_name, UINT8 app_id, tBTA_AV_DATA_CBACK  *p_data_cback, tBTA_AV_CO_FUNCTS *bta_av_cos, UINT8 tsep)
++void BTA_AvRegister(tBTA_AV_CHNL chnl, const char *p_service_name, UINT8 app_id,
++                    tBTA_AV_DATA_CBACK *p_data_cback, tBTA_AV_CO_FUNCTS *bta_av_cos,
++                    tBTA_AVRC_CO_FUNCTS *bta_avrc_cos, UINT8 tsep)
+ {
+     tBTA_AV_API_REG  *p_buf;
+ 
+@@ -122,6 +124,7 @@ void BTA_AvRegister(tBTA_AV_CHNL chnl, const char *p_service_name, UINT8 app_id,
+         p_buf->app_id = app_id;
+         p_buf->p_app_data_cback = p_data_cback;
+         p_buf->bta_av_cos = bta_av_cos;
++        p_buf->bta_avrc_cos = bta_avrc_cos;
+         p_buf->tsep = tsep;
+         bta_sys_sendmsg(p_buf);
+     }
+diff --git a/components/bt/bluedroid/bta/av/bta_av_cfg.c b/components/bt/bluedroid/bta/av/bta_av_cfg.c
+index 144df6ea3..b8a86831c 100644
+--- a/components/bt/bluedroid/bta/av/bta_av_cfg.c
++++ b/components/bt/bluedroid/bta/av/bta_av_cfg.c
+@@ -41,7 +41,7 @@ const UINT32  bta_av_meta_caps_co_ids[] = {
+ };
+ 
+ /* AVRCP cupported categories */
+-#define BTA_AV_RC_SUPF_CT       (AVRC_SUPF_CT_CAT2)
++#define BTA_AV_RC_SUPF_CT       (AVRC_SUPF_CT_CAT1)
+ 
+ /* Added to modify
+ **  1. flush timeout
+@@ -62,26 +62,11 @@ const UINT16  bta_av_audio_flush_to[] = {
+ /* Note: Android doesnt support AVRC_SUPF_TG_GROUP_NAVI  */
+ /* Note: if AVRC_SUPF_TG_GROUP_NAVI is set, bta_av_cfg.avrc_group should be TRUE */
+ #if AVRC_METADATA_INCLUDED == TRUE
+-#define BTA_AV_RC_SUPF_TG       (AVRC_SUPF_TG_CAT1) /* TODO: | AVRC_SUPF_TG_APP_SETTINGS) */
++#define BTA_AV_RC_SUPF_TG       (AVRC_SUPF_TG_CAT2) /* TODO: | AVRC_SUPF_TG_APP_SETTINGS) */
+ #else
+-#define BTA_AV_RC_SUPF_TG       (AVRC_SUPF_TG_CAT1)
++#define BTA_AV_RC_SUPF_TG       (AVRC_SUPF_TG_CAT2)
+ #endif
+ 
+-/*
+- * If the number of event IDs is changed in this array, BTA_AV_ NUM_RC_EVT_IDS   also needs to be changed.
+- */
+-const UINT8  bta_av_meta_caps_evt_ids[] = {
+-    AVRC_EVT_PLAY_STATUS_CHANGE,
+-    AVRC_EVT_TRACK_CHANGE,
+-    AVRC_EVT_PLAY_POS_CHANGED,
+-    /* TODO: Add support for these events
+-    AVRC_EVT_APP_SETTING_CHANGE,
+-    */
+-};
+-#ifndef BTA_AV_NUM_RC_EVT_IDS
+-#define BTA_AV_NUM_RC_EVT_IDS   (sizeof(bta_av_meta_caps_evt_ids) / sizeof(bta_av_meta_caps_evt_ids[0]))
+-#endif /* BTA_AV_NUM_RC_EVT_IDS */
+-
+ /* the MTU for the AVRCP browsing channel */
+ #ifndef BTA_AV_MAX_RC_BR_MTU
+ #define BTA_AV_MAX_RC_BR_MTU      1008
+@@ -105,10 +90,8 @@ const tBTA_AV_CFG bta_av_cfg = {
+     600,                    /* AVDTP video transport channel flush timeout */
+     FALSE,                   /* TRUE, to accept AVRC 1.3 group nevigation command */
+     2,                      /* company id count in p_meta_co_ids */
+-    BTA_AV_NUM_RC_EVT_IDS, /* event id count in p_meta_evt_ids */
+     BTA_AV_RC_PASS_RSP_CODE,/* the default response code for pass through commands */
+     bta_av_meta_caps_co_ids,/* the metadata Get Capabilities response for company id */
+-    bta_av_meta_caps_evt_ids,/* the the metadata Get Capabilities response for event id */
+     NULL,                   /* the action function table for VDP stream */
+     NULL,                   /* action function to register VDP */
+     {0},                    /* Default AVRCP controller name */
+@@ -117,91 +100,4 @@ const tBTA_AV_CFG bta_av_cfg = {
+ 
+ tBTA_AV_CFG *p_bta_av_cfg = (tBTA_AV_CFG *) &bta_av_cfg;
+ 
+-const UINT16 bta_av_rc_id[] = {
+-    0x0000, /* bit mask: 0=SELECT, 1=UP, 2=DOWN, 3=LEFT,
+-                         4=RIGHT, 5=RIGHT_UP, 6=RIGHT_DOWN, 7=LEFT_UP,
+-                         8=LEFT_DOWN, 9=ROOT_MENU, 10=SETUP_MENU, 11=CONT_MENU,
+-                         12=FAV_MENU, 13=EXIT */
+-
+-    0,      /* not used */
+-
+-    0x0000, /* bit mask: 0=0, 1=1, 2=2, 3=3,
+-                         4=4, 5=5, 6=6, 7=7,
+-                         8=8, 9=9, 10=DOT, 11=ENTER,
+-                         12=CLEAR */
+-
+-    0x0000, /* bit mask: 0=CHAN_UP, 1=CHAN_DOWN, 2=PREV_CHAN, 3=SOUND_SEL,
+-                         4=INPUT_SEL, 5=DISP_INFO, 6=HELP, 7=PAGE_UP,
+-                         8=PAGE_DOWN */
+-
+-#if (BTA_AV_RC_PASS_RSP_CODE == BTA_AV_RSP_INTERIM)
+-    /* btui_app provides an example of how to leave the decision of rejecting a command or not
+-     * based on which media player is currently addressed (this is only applicable for AVRCP 1.4 or later)
+-     * If the decision is per player for a particular rc_id, the related bit is clear (not set) */
+-    0x0070, /* bit mask: 0=POWER, 1=VOL_UP, 2=VOL_DOWN, 3=MUTE,
+-                         4=PLAY, 5=STOP, 6=PAUSE, 7=RECORD,
+-                         8=REWIND, 9=FAST_FOR, 10=EJECT, 11=FORWARD,
+-                         12=BACKWARD */
+-#else
+-#if (defined BTA_AVRCP_FF_RW_SUPPORT) && (BTA_AVRCP_FF_RW_SUPPORT == TRUE)
+-    0x1b70, /* bit mask: 0=POWER, 1=VOL_UP, 2=VOL_DOWN, 3=MUTE,
+-                         4=PLAY, 5=STOP, 6=PAUSE, 7=RECORD,
+-                         8=REWIND, 9=FAST_FOR, 10=EJECT, 11=FORWARD,
+-                         12=BACKWARD */
+-#else
+-    0x1870, /* bit mask: 0=POWER, 1=VOL_UP, 2=VOL_DOWN, 3=MUTE,
+-                         4=PLAY, 5=STOP, 6=PAUSE, 7=RECORD,
+-                         8=REWIND, 9=FAST_FOR, 10=EJECT, 11=FORWARD,
+-                         12=BACKWARD */
+-#endif
+-#endif
+-
+-    0x0000, /* bit mask: 0=ANGLE, 1=SUBPICT */
+-
+-    0,      /* not used */
+-
+-    0x0000  /* bit mask: 0=not used, 1=F1, 2=F2, 3=F3,
+-                         4=F4, 5=F5 */
+-};
+-
+-#if (BTA_AV_RC_PASS_RSP_CODE == BTA_AV_RSP_INTERIM)
+-const UINT16 bta_av_rc_id_ac[] = {
+-    0x0000, /* bit mask: 0=SELECT, 1=UP, 2=DOWN, 3=LEFT,
+-                         4=RIGHT, 5=RIGHT_UP, 6=RIGHT_DOWN, 7=LEFT_UP,
+-                         8=LEFT_DOWN, 9=ROOT_MENU, 10=SETUP_MENU, 11=CONT_MENU,
+-                         12=FAV_MENU, 13=EXIT */
+-
+-    0,      /* not used */
+-
+-    0x0000, /* bit mask: 0=0, 1=1, 2=2, 3=3,
+-                         4=4, 5=5, 6=6, 7=7,
+-                         8=8, 9=9, 10=DOT, 11=ENTER,
+-                         12=CLEAR */
+-
+-    0x0000, /* bit mask: 0=CHAN_UP, 1=CHAN_DOWN, 2=PREV_CHAN, 3=SOUND_SEL,
+-                         4=INPUT_SEL, 5=DISP_INFO, 6=HELP, 7=PAGE_UP,
+-                         8=PAGE_DOWN */
+-
+-    /* btui_app provides an example of how to leave the decision of rejecting a command or not
+-     * based on which media player is currently addressed (this is only applicable for AVRCP 1.4 or later)
+-     * If the decision is per player for a particular rc_id, the related bit is set */
+-    0x1800, /* bit mask: 0=POWER, 1=VOL_UP, 2=VOL_DOWN, 3=MUTE,
+-                         4=PLAY, 5=STOP, 6=PAUSE, 7=RECORD,
+-                         8=REWIND, 9=FAST_FOR, 10=EJECT, 11=FORWARD,
+-                         12=BACKWARD */
+-
+-    0x0000, /* bit mask: 0=ANGLE, 1=SUBPICT */
+-
+-    0,      /* not used */
+-
+-    0x0000  /* bit mask: 0=not used, 1=F1, 2=F2, 3=F3,
+-                         4=F4, 5=F5 */
+-};
+-UINT16 *p_bta_av_rc_id_ac = (UINT16 *) bta_av_rc_id_ac;
+-#else
+-UINT16 *p_bta_av_rc_id_ac = NULL;
+-#endif
+-
+-UINT16 *p_bta_av_rc_id = (UINT16 *) bta_av_rc_id;
+-
+ #endif /* if defined(BTA_AV_INCLUDED) && (BTA_AV_INCLUDED == TRUE) */
+diff --git a/components/bt/bluedroid/bta/av/bta_av_main.c b/components/bt/bluedroid/bta/av/bta_av_main.c
+index b75a8ddd9..bc352c8fa 100644
+--- a/components/bt/bluedroid/bta/av/bta_av_main.c
++++ b/components/bt/bluedroid/bta/av/bta_av_main.c
+@@ -534,6 +534,11 @@ static void bta_av_api_register(tBTA_AV_DATA *p_data)
+     registr.app_id = p_data->api_reg.app_id;
+     registr.chnl   = (tBTA_AV_CHNL)p_data->hdr.layer_specific;
+     registr.p_bta_av_cos = p_data->api_reg.bta_av_cos;
++    registr.p_bta_avrc_cos = p_data->api_reg.bta_avrc_cos;
++
++    // set the avrc call-out functions
++    bta_av_cb.p_rc_cos = p_data->api_reg.bta_avrc_cos;
++
+     do {
+         p_scb = bta_av_alloc_scb(registr.chnl);
+         if (p_scb == NULL) {
+@@ -619,7 +624,6 @@ static void bta_av_api_register(tBTA_AV_DATA *p_data)
+         if (registr.chnl == BTA_AV_CHNL_AUDIO) {
+             /* set up the audio stream control block */
+             p_scb->p_act_tbl = (const tBTA_AV_ACT *)bta_av_a2d_action;
+-            // p_scb->p_cos     = &bta_av_a2d_cos;
+             p_scb->p_cos     = registr.p_bta_av_cos;
+             p_scb->media_type = AVDT_MEDIA_AUDIO;
+             cs.cfg.psc_mask  = AVDT_PSC_TRANS;
+diff --git a/components/bt/bluedroid/bta/av/include/bta_av_int.h b/components/bt/bluedroid/bta/av/include/bta_av_int.h
+index 16b3f38df..16a70f3ef 100644
+--- a/components/bt/bluedroid/bta/av/include/bta_av_int.h
++++ b/components/bt/bluedroid/bta/av/include/bta_av_int.h
+@@ -174,6 +174,7 @@ typedef struct {
+     UINT8               tsep; // local SEP type
+     tBTA_AV_DATA_CBACK  *p_app_data_cback;
+     tBTA_AV_CO_FUNCTS   *bta_av_cos;
++    tBTA_AVRC_CO_FUNCTS *bta_avrc_cos;
+ } tBTA_AV_API_REG;
+ 
+ 
+@@ -473,6 +474,8 @@ typedef struct {
+     UINT8   shdl;   /* stream handle (hdi + 1) */
+     UINT8   lidx;   /* (index+1) to LCB */
+     tBTA_AV_FEAT        peer_features;  /* peer features mask */
++    UINT16              peer_ct_features;
++    UINT16              peer_tg_features;
+ } tBTA_AV_RCB;
+ #define BTA_AV_NUM_RCB      (BTA_AV_NUM_STRS  + 2)
+ 
+@@ -509,6 +512,7 @@ typedef struct {
+     tBTA_AV_FEAT        features;       /* features mask */
+     tBTA_SEC            sec_mask;       /* security mask */
+     tBTA_AV_HNDL        handle;         /* the handle for SDP activity */
++    tBTA_AVRC_CO_FUNCTS *p_rc_cos;      /* AVRCP call-out functions */
+     BOOLEAN             disabling;      /* TRUE if api disabled called */
+     UINT8               disc;           /* (hdi+1) or (rc_handle|BTA_AV_CHNL_MSK) if p_disc_db is in use */
+     UINT8               state;          /* state machine state */
+@@ -544,12 +548,7 @@ extern tBTA_AV_CB *bta_av_cb_ptr;
+ /* config struct */
+ extern tBTA_AV_CFG *p_bta_av_cfg;
+ 
+-/* rc id config struct */
+-extern UINT16 *p_bta_av_rc_id;
+-extern UINT16 *p_bta_av_rc_id_ac;
+-
+ extern const tBTA_AV_SACT bta_av_a2d_action[];
+-// extern const tBTA_AV_CO_FUNCTS bta_av_a2d_cos;
+ extern const tBTA_AV_SACT bta_av_vdp_action[];
+ extern tAVDT_CTRL_CBACK *const bta_av_dt_cback[];
+ extern void bta_av_stream_data_cback(UINT8 handle, BT_HDR *p_pkt, UINT32 time_stamp, UINT8 m_pt);
+diff --git a/components/bt/bluedroid/bta/include/bta/bta_av_api.h b/components/bt/bluedroid/bta/include/bta/bta_av_api.h
+index 87c2d374a..351c0bc61 100644
+--- a/components/bt/bluedroid/bta/include/bta/bta_av_api.h
++++ b/components/bt/bluedroid/bta/include/bta/bta_av_api.h
+@@ -279,20 +279,35 @@ typedef void *(*tBTA_AV_CO_DATAPATH) (tBTA_AV_CODEC codec_type,
+                                       UINT32 *p_len, UINT32 *p_timestamp);
+ typedef void (*tBTA_AV_CO_DELAY) (tBTA_AV_HNDL hndl, UINT16 delay);
+ 
++/// AVRCP call-out function
++// check whether PASSTHROUGH command is supported
++typedef BOOLEAN (*tBTA_AVRC_CO_CMD_ALLOWED) (tBTA_AV_RC rc_id);
++// get the event notification capabilities
++typedef UINT8 (*tBTA_AVRC_CO_RN_EVT_CAP) (UINT8 *event_ids);
++// check whether the event_id is supported
++typedef BOOLEAN (*tBTA_AVRC_CO_RN_EVT_SUPPORTED) (UINT8 event_id);
++
+ /* the call-out functions for one stream */
+ typedef struct {
+-    tBTA_AV_CO_INIT     init;
+-    tBTA_AV_CO_DISC_RES disc_res;
+-    tBTA_AV_CO_GETCFG   getcfg;
+-    tBTA_AV_CO_SETCFG   setcfg;
+-    tBTA_AV_CO_OPEN     open;
+-    tBTA_AV_CO_CLOSE    close;
+-    tBTA_AV_CO_START    start;
+-    tBTA_AV_CO_STOP     stop;
+-    tBTA_AV_CO_DATAPATH data;
+-    tBTA_AV_CO_DELAY    delay;
++    tBTA_AV_CO_INIT               init;
++    tBTA_AV_CO_DISC_RES           disc_res;
++    tBTA_AV_CO_GETCFG             getcfg;
++    tBTA_AV_CO_SETCFG             setcfg;
++    tBTA_AV_CO_OPEN               open;
++    tBTA_AV_CO_CLOSE              close;
++    tBTA_AV_CO_START              start;
++    tBTA_AV_CO_STOP               stop;
++    tBTA_AV_CO_DATAPATH           data;
++    tBTA_AV_CO_DELAY              delay;
+ } tBTA_AV_CO_FUNCTS;
+ 
++/* the call-out functions for AVRCP */
++typedef struct {
++    tBTA_AVRC_CO_CMD_ALLOWED         rc_cmd;
++    tBTA_AVRC_CO_RN_EVT_CAP          rn_evt_cap;
++    tBTA_AVRC_CO_RN_EVT_SUPPORTED    rn_evt_supported;
++} tBTA_AVRC_CO_FUNCTS;
++
+ typedef UINT8 tBTA_AV_EVT;
+ 
+ /* Event associated with BTA_AV_ENABLE_EVT */
+@@ -307,6 +322,7 @@ typedef struct {
+     UINT8           app_id;     /* ID associated with call to BTA_AvRegister() */
+     tBTA_AV_STATUS  status;
+     tBTA_AV_CO_FUNCTS *p_bta_av_cos;
++    tBTA_AVRC_CO_FUNCTS *p_bta_avrc_cos;
+ } tBTA_AV_REGISTER;
+ 
+ /* data associated with BTA_AV_OPEN_EVT */
+@@ -377,6 +393,8 @@ typedef struct {
+     UINT8           rc_handle;
+     BOOLEAN         sdp_disc_done;
+     tBTA_AV_FEAT    peer_features;
++    UINT16          peer_ct_features;
++    UINT16          peer_tg_features;
+     BD_ADDR         peer_addr;
+     tBTA_AV_STATUS  status;
+ } tBTA_AV_RC_OPEN;
+@@ -391,6 +409,8 @@ typedef struct {
+ typedef struct {
+     UINT8           rc_handle;
+     tBTA_AV_FEAT    peer_features;
++    UINT16          peer_ct_features;
++    UINT16          peer_tg_features;
+ } tBTA_AV_RC_FEAT;
+ 
+ /* data associated with BTA_AV_REMOTE_CMD_EVT */
+@@ -519,10 +539,8 @@ typedef struct {
+     UINT16  video_flush_to;     /* AVDTP video transport channel flush timeout */
+     BOOLEAN avrc_group;         /* TRUE, to accept AVRC 1.3 group nevigation command */
+     UINT8   num_co_ids;         /* company id count in p_meta_co_ids */
+-    UINT8   num_evt_ids;        /* event id count in p_meta_evt_ids */
+     tBTA_AV_CODE  rc_pass_rsp;  /* the default response code for pass through commands */
+     const UINT32 *p_meta_co_ids;/* the metadata Get Capabilities response for company id */
+-    const UINT8 *p_meta_evt_ids;/* the the metadata Get Capabilities response for event id */
+     const tBTA_AV_ACT *p_act_tbl;/* the action function table for VDP stream */
+     tBTA_AV_REG       *p_reg;   /* action function to register VDP */
+     char              avrc_controller_name[BTA_SERVICE_NAME_LEN]; /* Default AVRCP controller name */
+@@ -580,7 +598,9 @@ void BTA_AvDisable(void);
+ **
+ *******************************************************************************/
+ void BTA_AvRegister(tBTA_AV_CHNL chnl, const char *p_service_name,
+-                    UINT8 app_id, tBTA_AV_DATA_CBACK  *p_data_cback, tBTA_AV_CO_FUNCTS *bta_av_cos, UINT8 tsep);
++                    UINT8 app_id, tBTA_AV_DATA_CBACK  *p_data_cback,
++                    tBTA_AV_CO_FUNCTS *bta_av_cos, tBTA_AVRC_CO_FUNCTS *bta_avrc_cos,
++                    UINT8 tsep);
+ 
+ /*******************************************************************************
+ **
+diff --git a/components/bt/bluedroid/btc/core/btc_task.c b/components/bt/bluedroid/btc/core/btc_task.c
+index 1022e770d..338d6841f 100644
+--- a/components/bt/bluedroid/btc/core/btc_task.c
++++ b/components/bt/bluedroid/btc/core/btc_task.c
+@@ -78,7 +78,8 @@ static btc_func_t profile_tab[BTC_PID_NUM] = {
+     [BTC_PID_PRF_QUE]     = {btc_profile_queue_handler,   NULL                    },
+ #if BTC_AV_INCLUDED
+     [BTC_PID_A2DP]        = {btc_a2dp_call_handler,       btc_a2dp_cb_handler     },
+-    [BTC_PID_AVRC]        = {btc_avrc_call_handler,       NULL                    },
++    [BTC_PID_AVRC_CT]     = {btc_avrc_ct_call_handler,    NULL                    },
++    [BTC_PID_AVRC_TG]     = {btc_avrc_tg_call_handler,    NULL                    },
+ #endif /* #if BTC_AV_INCLUDED */
+ #if CONFIG_BT_SPP_ENABLED
+     [BTC_PID_SPP]         = {btc_spp_call_handler,        btc_spp_cb_handler      },
+diff --git a/components/bt/bluedroid/btc/include/btc/btc_task.h b/components/bt/bluedroid/btc/include/btc/btc_task.h
+index 5813c5217..ca5abd375 100644
+--- a/components/bt/bluedroid/btc/include/btc/btc_task.h
++++ b/components/bt/bluedroid/btc/include/btc/btc_task.h
+@@ -57,7 +57,8 @@ typedef enum {
+     BTC_PID_GAP_BT,
+     BTC_PID_PRF_QUE,
+     BTC_PID_A2DP,
+-    BTC_PID_AVRC,
++    BTC_PID_AVRC_CT,
++    BTC_PID_AVRC_TG,
+     BTC_PID_SPP,
+ #if BTC_HF_CLIENT_INCLUDED
+     BTC_PID_HF_CLIENT,
+diff --git a/components/bt/bluedroid/btc/profile/std/a2dp/btc_av.c b/components/bt/bluedroid/btc/profile/std/a2dp/btc_av.c
+index dee8c8fba..f428150ba 100644
+--- a/components/bt/bluedroid/btc/profile/std/a2dp/btc_av.c
++++ b/components/bt/bluedroid/btc/profile/std/a2dp/btc_av.c
+@@ -148,6 +148,7 @@ static void btc_av_event_free_data(btc_sm_event_t event, void *p_data);
+ *************************************************************************/
+ 
+ extern tBTA_AV_CO_FUNCTS bta_av_a2d_cos;
++extern tBTA_AVRC_CO_FUNCTS bta_avrc_cos;
+ /*****************************************************************************
+ ** Local helper functions
+ ******************************************************************************/
+@@ -1233,7 +1234,7 @@ bt_status_t btc_av_execute_service(BOOLEAN b_enable, UINT8 tsep)
+                      | BTA_AV_FEAT_RCTG | BTA_AV_FEAT_METADATA | BTA_AV_FEAT_VENDOR
+                      | BTA_AV_FEAT_RCCT | BTA_AV_FEAT_ADV_CTRL,
+                      bte_av_callback);
+-        BTA_AvRegister(BTA_AV_CHNL_AUDIO, BTC_AV_SERVICE_NAME, 0, bte_av_media_callback, &bta_av_a2d_cos, tsep);
++        BTA_AvRegister(BTA_AV_CHNL_AUDIO, BTC_AV_SERVICE_NAME, 0, bte_av_media_callback, &bta_av_a2d_cos, &bta_avrc_cos, tsep);
+     } else {
+         BTA_AvDeregister(btc_av_cb.bta_handle);
+         BTA_AvDisable();
+diff --git a/components/bt/bluedroid/btc/profile/std/avrc/bta_avrc_co.c b/components/bt/bluedroid/btc/profile/std/avrc/bta_avrc_co.c
+new file mode 100644
+index 000000000..793e296cb
+--- /dev/null
++++ b/components/bt/bluedroid/btc/profile/std/avrc/bta_avrc_co.c
+@@ -0,0 +1,106 @@
++/******************************************************************************
++ *
++ *  This is the AVRC call-out function implementation for  BTC.
++ *
++ ******************************************************************************/
++// Copyright 2015-2018 Espressif Systems (Shanghai) PTE LTD
++//
++// Licensed under the Apache License, Version 2.0 (the "License");
++// you may not use this file except in compliance with the License.
++// You may obtain a copy of the License at
++
++//     http://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing, software
++// distributed under the License is distributed on an "AS IS" BASIS,
++// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++// See the License for the specific language governing permissions and
++// limitations under the License.
++
++/*****************************************************************************
++ *
++ *  Filename:      bta_avrc_co.c
++ *
++ *  Description:   Bluetooth AVRC implementation
++ *
++ *****************************************************************************/
++
++#include <stdint.h>
++#include "common/bt_target.h"
++#include "bta/bta_sys.h"
++#include "bta/bta_av_api.h"
++#include "btc_avrc.h"
++
++#if BTC_AV_INCLUDED
++/*******************************************************************************
++ **
++ ** Function         bta_avrc_co_cmd_allowed
++ **
++ ** Description      Check if local AVRCP TG configuration supports a specific
++ **                  PASSTHROUGH command with the given operation_id
++ **
++ ** Returns          TRUE if operation_id is supported, FALSE otherwise
++ **
++ *******************************************************************************/
++BOOLEAN bta_avrc_co_cmd_allowed(tBTA_AV_RC rc_id)
++{
++    if (rc_id >= BTA_AV_VENDOR) {
++        return FALSE;
++    }
++    const uint16_t *rc_cmd = btc_avrc_tg_get_supported_command();
++    if (rc_cmd[rc_id >> 4] & ((uint16_t)1 << (rc_id & 0x0F))) {
++        return TRUE;
++    } else {
++        return FALSE;
++    }
++}
++
++/*******************************************************************************
++ **
++ ** Function         bta_avrc_co_rn_evt_cap
++ **
++ ** Description      get the event notifcation capabilities on AVRCP target
++ **
++ ** Returns          number of event_ids supported
++ **
++ *******************************************************************************/
++UINT8 bta_avrc_co_rn_evt_cap(UINT8 *event_ids)
++{
++    if (event_ids == 0) {
++        return 0;
++    }
++
++    UINT16 event_bits = btc_avrc_tg_get_rn_supported_evt();
++    UINT8 count = 0;
++    for (UINT8 i = 0; i < 16; ++i, event_bits >>= 1) {
++        if (event_bits & 0x01) {
++            event_ids[count++] = i;
++        }
++    }
++    return count;
++}
++
++/*******************************************************************************
++ **
++ ** Function         bta_avrc_co_evt_supported
++ **
++ ** Description      Check if local AVRCP TG configuration supports the given
++ **                  event_id
++ **
++ ** Returns          TRUE if operation_id is supported, FALSE otherwise
++ **
++ *******************************************************************************/
++BOOLEAN bta_avrc_co_rn_evt_supported(UINT8 event_id)
++{
++    return btc_avrc_tg_rn_evt_supported(event_id) ?
++           TRUE : FALSE;
++}
++
++/* the call out functions for AVRC */
++tBTA_AVRC_CO_FUNCTS bta_avrc_cos = {
++    bta_avrc_co_cmd_allowed,
++    bta_avrc_co_rn_evt_cap,
++    bta_avrc_co_rn_evt_supported,
++};
++
++#endif /* #if BTC_AV_INCLUDED */
+diff --git a/components/bt/bluedroid/btc/profile/std/avrc/btc_avrc.c b/components/bt/bluedroid/btc/profile/std/avrc/btc_avrc.c
+index 539760b92..6e204be48 100644
+--- a/components/bt/bluedroid/btc/profile/std/avrc/btc_avrc.c
++++ b/components/bt/bluedroid/btc/profile/std/avrc/btc_avrc.c
+@@ -38,17 +38,14 @@
+ /*****************************************************************************
+ **  Constants & Macros
+ ******************************************************************************/
+-/* for AVRC 1.4 need to change this */
+-#define MAX_RC_NOTIFICATIONS AVRC_EVT_APP_SETTING_CHANGE
++#define BTC_RC_CT_INIT_MAGIC            0x20181128
++#define BTC_RC_TG_INIT_MAGIC            0x20181129
+ 
+-#define MAX_VOLUME 128
+-#define MAX_LABEL 16
+-#define MAX_TRANSACTIONS_PER_SESSION 16
+-#define MAX_CMD_QUEUE_LEN 8
++#define MAX_RC_NOTIFICATIONS            (13)  // refer to ESP_AVRC_RN_MAX_EVT
+ 
+ #define CHECK_ESP_RC_CONNECTED       do { \
+         BTC_TRACE_DEBUG("## %s ##", __FUNCTION__); \
+-        if (btc_rc_vb.rc_connected == FALSE) { \
++        if (btc_rc_cb.rc_connected == FALSE) { \
+             BTC_TRACE_WARNING("Function %s() called when RC is not connected", __FUNCTION__); \
+         return ESP_ERR_INVALID_STATE; \
+         } \
+@@ -58,73 +55,402 @@
+ **  Local type definitions
+ ******************************************************************************/
+ typedef struct {
+-    UINT8 bNotify;
++    BOOLEAN registered;
+     UINT8 label;
+-} btc_rc_reg_notifications_t;
++} btc_rc_reg_ntf_t;
+ 
+-typedef struct {
+-    UINT8   label;
+-    UINT8   ctype;
+-    BOOLEAN is_rsp_pending;
+-} btc_rc_cmd_ctxt_t;
+-
+-/* TODO : Merge btc_rc_reg_notifications_t and btc_rc_cmd_ctxt_t to a single struct */
+ typedef struct {
+     BOOLEAN                     rc_connected;
+     UINT8                       rc_handle;
+     tBTA_AV_FEAT                rc_features;
++    UINT16                      rc_ct_features;
++    UINT16                      rc_tg_features;
+     BD_ADDR                     rc_addr;
+-    UINT16                      rc_pending_play;
+-    btc_rc_cmd_ctxt_t           rc_pdu_info[MAX_CMD_QUEUE_LEN];
+-    btc_rc_reg_notifications_t  rc_notif[MAX_RC_NOTIFICATIONS];
+-    unsigned int                rc_volume;
+-    uint8_t                     rc_vol_label;
++    btc_rc_reg_ntf_t            rc_ntf[MAX_RC_NOTIFICATIONS];
+ } btc_rc_cb_t;
+ 
+-typedef struct {
+-    BOOLEAN in_use;
+-    UINT8 lbl;
+-    UINT8 handle;
+-} rc_transaction_t;
+-
+-typedef struct {
+-    osi_mutex_t lbllock;
+-    rc_transaction_t transaction[MAX_TRANSACTIONS_PER_SESSION];
+-} rc_device_t;
+-
+-rc_device_t device;
+-
++static UINT8 opcode_from_pdu(UINT8 pdu);
++static void send_reject_response (UINT8 rc_handle, UINT8 label, UINT8 pdu, UINT8 status);
+ static void handle_rc_connect (tBTA_AV_RC_OPEN *p_rc_open);
+ static void handle_rc_disconnect (tBTA_AV_RC_CLOSE *p_rc_close);
+ static void handle_rc_passthrough_rsp ( tBTA_AV_REMOTE_RSP *p_remote_rsp);
+-static void handle_rc_metadata_rsp ( tBTA_AV_META_MSG *p_remote_rsp);
++static void handle_rc_metamsg_cmd ( tBTA_AV_META_MSG *p_meta_msg);
++static void handle_rc_metamsg_rsp ( tBTA_AV_META_MSG *p_remote_rsp);
++static void btc_rc_upstreams_evt(UINT16 event, tAVRC_COMMAND *pavrc_cmd, UINT8 ctype, UINT8 label);
+ 
+ /*****************************************************************************
+ **  Static variables
+ ******************************************************************************/
+-static btc_rc_cb_t btc_rc_vb;
++
++/* flag indicating wheter TG/CT is initialized */
++static uint32_t s_rc_ct_init;
++static uint32_t s_rc_tg_init;
++
++static btc_rc_cb_t btc_rc_cb;
++
++const static uint16_t cs_psth_allowed_cmd[8] = {
++    0x0000, /* bit mask: 0=SELECT, 1=UP, 2=DOWN, 3=LEFT,
++                         4=RIGHT, 5=RIGHT_UP, 6=RIGHT_DOWN, 7=LEFT_UP,
++                         8=LEFT_DOWN, 9=ROOT_MENU, 10=SETUP_MENU, 11=CONT_MENU,
++                         12=FAV_MENU, 13=EXIT */
++    0x0000, /* not used */
++    0x1FFF, /* bit mask: 0=0, 1=1, 2=2, 3=3,
++                         4=4, 5=5, 6=6, 7=7,
++                         8=8, 9=9, 10=DOT, 11=ENTER,
++                         12=CLEAR */
++    0x0078, /* bit mask: 0=CHAN_UP, 1=CHAN_DOWN, 2=PREV_CHAN, 3=SOUND_SEL,
++                         4=INPUT_SEL, 5=DISP_INFO, 6=HELP, 7=PAGE_UP,
++                         8=PAGE_DOWN */
++    0x1b3F, /* bit mask: 0=POWER, 1=VOL_UP, 2=VOL_DOWN, 3=MUTE,
++                         4=PLAY, 5=STOP, 6=PAUSE, 7=RECORD,
++                         8=REWIND, 9=FAST_FOR, 10=EJECT, 11=FORWARD,
++                         12=BACKWARD */
++    0x0000, /* bit mask: 0=ANGLE, 1=SUBPICT */
++    0x0000, /* not used */
++    0x003E  /* bit mask: 0=not used, 1=F1, 2=F2, 3=F3,
++                         4=F4, 5=F5 */
++};
++
++const static uint16_t cs_psth_dft_supported_cmd[8] = {0};
++static uint16_t s_psth_supported_cmd[8];
++
++const static uint16_t cs_rn_allowed_evt = \
++        0x2000; /* bit mask: 0=rsvd, 1=play_status, 2=track_chg, 3=reached_end,
++                             4=reached_start, 5=pos_chg, 6=batt_status, 7=sys_status_chg,
++                             8=player_app_setting, 9=now_playing_content, 10=avail_players, 11=addressed_player,
++                             12=UID, 13=volume_chg */
++
++const static uint16_t cs_rn_dft_supported_evt = 0;
++static uint16_t s_rn_supported_evt;
++
++// event ids supported to register as CT
++const static uint16_t cs_ct_rn_supported_evt = \
++        0x2026; /* bit mask: 0=rsvd, 1=play_status, 2=track_chg, 3=reached_end,
++                             4=reached_start, 5=pos_chg, 6=batt_status, 7=sys_status_chg,
++                             8=player_app_setting, 9=now_playing_content, 10=avail_players, 11=addressed_player,
++                             12=UID, 13=volume_chg */
+ 
+ /*****************************************************************************
+ **  Externs
+ ******************************************************************************/
++const uint16_t *btc_avrc_tg_get_allowed_command(void)
++{
++    return cs_psth_allowed_cmd;
++}
++
++const uint16_t *btc_avrc_tg_get_supported_command(void)
++{
++    return s_psth_supported_cmd;
++}
++
++bool btc_avrc_tg_check_supported_command(const uint16_t *cmd_set)
++{
++    if (cmd_set == NULL) {
++        return false;
++    }
++
++    // check if cmd_set is a subset of allowed command set
++    bool ret = true;
++    for (int i = 0; i < 8; ++i) {
++        if (cs_psth_allowed_cmd[i] != (cmd_set[i] | cs_psth_allowed_cmd[i])) {
++            ret = false;
++            break;
++        }
++    }
++
++    return ret;
++}
++
++uint16_t btc_avrc_tg_get_rn_allowed_evt(void)
++{
++    return cs_rn_allowed_evt;
++}
++
++uint16_t btc_avrc_tg_get_rn_supported_evt(void)
++{
++    return s_rn_supported_evt;
++}
++
++bool btc_avrc_tg_check_rn_supported_evt(uint16_t evt_set)
++{
++    uint16_t evt_super_set = evt_set | cs_rn_allowed_evt;
++    if (evt_super_set == cs_rn_allowed_evt) {
++        return true;
++    } else {
++        return false;
++    }
++}
++
++bool btc_avrc_tg_rn_evt_supported(uint8_t event_id)
++{
++    uint16_t event_bits = s_rn_supported_evt;
++    return ((event_bits >> event_id) & 0x0001) ?
++           true : false;
++}
++
++bool btc_avrc_ct_rn_evt_supported(uint8_t event_id)
++{
++    uint16_t event_bits = cs_ct_rn_supported_evt;
++    return ((event_bits >> event_id) & 0x0001) ?
++           true : false;
++}
++
++bool btc_avrc_tg_init_p(void)
++{
++    return (s_rc_tg_init == BTC_RC_TG_INIT_MAGIC);
++}
++
++bool btc_avrc_ct_init_p(void)
++{
++    return (s_rc_ct_init == BTC_RC_CT_INIT_MAGIC);
++}
++
++bool btc_avrc_tg_connected_p(void)
++{
++    return (s_rc_tg_init == BTC_RC_TG_INIT_MAGIC) &&
++           (btc_rc_cb.rc_connected = TRUE) &&
++           (btc_rc_cb.rc_features & BTA_AV_FEAT_RCCT);
++}
++
++bool btc_avrc_ct_connected_p(void)
++{
++    return (s_rc_ct_init == BTC_RC_CT_INIT_MAGIC) &&
++           (btc_rc_cb.rc_connected = TRUE) &&
++           (btc_rc_cb.rc_features & BTA_AV_FEAT_RCTG);
++}
++
++void btc_avrc_tg_arg_deep_copy(btc_msg_t *msg, void *p_dest, void *p_src)
++{
++    btc_avrc_tg_args_t *dst = (btc_avrc_tg_args_t *) p_dest;
++    btc_avrc_tg_args_t *src = (btc_avrc_tg_args_t *)p_src;
++    size_t len;
++
++    switch (msg->act) {
++    case BTC_AVRC_TG_API_SET_PSTH_SUPPORTED_CMD_EVT:
++        len = 8 * sizeof(uint16_t);
++        dst->set_psth_cmd = (uint16_t *)osi_malloc(len);
++        if (dst->set_psth_cmd) {
++            memcpy(dst->set_psth_cmd, src->set_psth_cmd, len);
++        } else {
++            BTC_TRACE_ERROR("%s %d no mem\n", __FUNCTION__, msg->act);
++        }
++        break;
++    default:
++        BTC_TRACE_DEBUG("%s Unhandled deep copy %d\n", __FUNCTION__, msg->act);
++        break;
++    }
++}
++
+ /*****************************************************************************
+ **  Static functions
+ ******************************************************************************/
++static void btc_avrc_tg_arg_deep_free(btc_msg_t *msg)
++{
++    btc_avrc_tg_args_t *arg = (btc_avrc_tg_args_t *)msg->arg;
++
++    switch (msg->act) {
++    case BTC_AVRC_TG_API_SET_PSTH_SUPPORTED_CMD_EVT:
++        if (arg->set_psth_cmd) {
++            osi_free(arg->set_psth_cmd);
++        }
++        break;
++    default:
++        BTC_TRACE_DEBUG("%s Unhandled deep free %d\n", __FUNCTION__, msg->act);
++        break;
++    }
++}
++
++static bool btc_avrc_tg_set_supported_command(const uint16_t *cmd_set)
++{
++    if (!btc_avrc_tg_init_p()) {
++        BTC_TRACE_WARNING("%s failed: AVRC TG not yet initialized\n", __FUNCTION__);
++        return false;
++    }
++    if (!btc_avrc_tg_check_supported_command(cmd_set)) {
++        return false;
++    } else {
++        memcpy(s_psth_supported_cmd, cmd_set, sizeof(s_psth_supported_cmd));
++        return true;
++    }
++}
++
++static bool btc_avrc_tg_set_rn_supported_evt(uint16_t evt_set)
++{
++    if (!btc_avrc_tg_init_p()) {
++        BTC_TRACE_WARNING("%s failed: AVRC TG not yet initialized\n", __FUNCTION__);
++        return false;
++    }
++
++    if (btc_avrc_tg_check_rn_supported_evt(evt_set)) {
++        s_rn_supported_evt = evt_set;
++        return true;
++    } else {
++        return false;
++    }
++}
++
+ static inline void btc_avrc_ct_cb_to_app(esp_avrc_ct_cb_event_t event, esp_avrc_ct_cb_param_t *param)
+ {
+-    esp_avrc_ct_cb_t btc_avrc_cb = (esp_avrc_ct_cb_t)btc_profile_cb_get(BTC_PID_AVRC);
+-    if (btc_avrc_cb) {
+-        btc_avrc_cb(event, param);
++    if (s_rc_ct_init != BTC_RC_CT_INIT_MAGIC) {
++        return;
++    }
++
++    esp_avrc_ct_cb_t btc_avrc_ct_cb = (esp_avrc_ct_cb_t)btc_profile_cb_get(BTC_PID_AVRC_CT);
++    if (btc_avrc_ct_cb) {
++        btc_avrc_ct_cb(event, param);
++    }
++}
++
++static inline void btc_avrc_tg_cb_to_app(esp_avrc_tg_cb_event_t event, esp_avrc_tg_cb_param_t *param)
++{
++    if (s_rc_tg_init != BTC_RC_TG_INIT_MAGIC) {
++        return;
++    }
++
++    esp_avrc_tg_cb_t btc_avrc_tg_cb = (esp_avrc_tg_cb_t)btc_profile_cb_get(BTC_PID_AVRC_TG);
++    if (btc_avrc_tg_cb) {
++        btc_avrc_tg_cb(event, param);
++    }
++}
++
++/***************************************************************************
++ *  Function       send_metamsg_rsp
++ *
++ *  - Argument:
++ *                  rc_handle     RC handle corresponding to the connected RC
++ *                  label            Label of the RC response
++ *                  code            Response type
++ *                  p_meta_rsp      Vendor response
++ *
++ *  - Description: Remote control metamsg response handler (AVRCP 1.3)
++ *
++ ***************************************************************************/
++static void send_metamsg_rsp (UINT8 rc_handle, UINT8 label, tBTA_AV_CODE code,
++                              tAVRC_RESPONSE *p_meta_rsp)
++{
++    UINT8 ctype;
++
++    if (!p_meta_rsp) {
++        BTC_TRACE_WARNING("%s: Invalid response received from application", __FUNCTION__);
++        return;
++    }
++
++    BTC_TRACE_EVENT("%s: rc_handle: %d, label: %d, code: 0x%02x, pdu: %d", __FUNCTION__,
++                    rc_handle, label, code, p_meta_rsp->rsp.pdu);
++
++    if (p_meta_rsp->rsp.status != AVRC_STS_NO_ERROR) {
++        ctype = AVRC_RSP_REJ;
++    } else {
++        if (code < AVRC_RSP_NOT_IMPL) {
++            if (code == AVRC_CMD_NOTIF) {
++                ctype = AVRC_RSP_INTERIM;
++            } else if (code == AVRC_CMD_STATUS) {
++                ctype = AVRC_RSP_IMPL_STBL;
++            } else {
++                ctype = AVRC_RSP_ACCEPT;
++            }
++        } else {
++            ctype = code;
++        }
++    }
++
++    /* if response is for register_notification, make sure the rc has actually registered for this */
++    if ((p_meta_rsp->rsp.pdu == AVRC_PDU_REGISTER_NOTIFICATION) && (code == AVRC_RSP_CHANGED)) {
++        UINT8   event_id = p_meta_rsp->reg_notif.event_id;
++        BOOLEAN notify = (btc_rc_cb.rc_connected) && (btc_rc_cb.rc_ntf[event_id - 1].registered);
++
++        /* de-register this notification for a CHANGED response */
++        btc_rc_cb.rc_ntf[event_id - 1].registered = FALSE;
++        BTC_TRACE_DEBUG("%s rc_handle: %d. event_id: 0x%02d deregistered", __FUNCTION__,
++                        btc_rc_cb.rc_handle, event_id);
++        if (notify) {
++            BT_HDR *p_msg = NULL;
++            tAVRC_STS status = AVRC_BldResponse(btc_rc_cb.rc_handle, p_meta_rsp, &p_msg);
++
++            if (status == AVRC_STS_NO_ERROR) {
++                BTC_TRACE_DEBUG("%s Sending notification to rc_handle: %d. event_id: 0x%02d",
++                                __FUNCTION__, btc_rc_cb.rc_handle, event_id);
++                BTA_AvMetaRsp(btc_rc_cb.rc_handle, btc_rc_cb.rc_ntf[event_id - 1].label, ctype, p_msg);
++            } else {
++                BTC_TRACE_WARNING("%s failed to build metamsg response. status: 0x%02x",
++                                  __FUNCTION__, status);
++            }
++        }
++    } else {
++        // send response
++        BT_HDR *p_msg = NULL;
++        tAVRC_STS status;
++
++        status = AVRC_BldResponse(rc_handle, p_meta_rsp, &p_msg);
++
++        if (status == AVRC_STS_NO_ERROR) {
++            BTA_AvMetaRsp(rc_handle, label, ctype, p_msg);
++        } else {
++            BTC_TRACE_ERROR("%s: failed to build metamsg response. status: 0x%02x",
++                            __FUNCTION__, status);
++        }
++    }
++}
++
++
++static UINT8 opcode_from_pdu(UINT8 pdu)
++{
++    UINT8 opcode = 0;
++
++    switch (pdu) {
++    case AVRC_PDU_NEXT_GROUP:
++    case AVRC_PDU_PREV_GROUP: /* pass thru */
++        opcode  = AVRC_OP_PASS_THRU;
++        break;
++
++    default: /* vendor */
++        opcode  = AVRC_OP_VENDOR;
++        break;
++    }
++
++    return opcode;
++}
++
++/* Generic reject response */
++static void send_reject_response (UINT8 rc_handle, UINT8 label, UINT8 pdu, UINT8 status)
++{
++    UINT8 ctype = AVRC_RSP_REJ;
++    tAVRC_RESPONSE avrc_rsp;
++    BT_HDR *p_msg = NULL;
++    memset (&avrc_rsp, 0, sizeof(tAVRC_RESPONSE));
++
++    avrc_rsp.rsp.opcode = opcode_from_pdu(pdu);
++    avrc_rsp.rsp.pdu    = pdu;
++    avrc_rsp.rsp.status = status;
++
++    if (AVRC_STS_NO_ERROR == (status = AVRC_BldResponse(rc_handle, &avrc_rsp, &p_msg)) ) {
++        BTC_TRACE_DEBUG("%s: Sending error notification to handle:%d. pdu:%s,status:0x%02x",
++                        __FUNCTION__, rc_handle, dump_rc_pdu(pdu), status);
++        BTA_AvMetaRsp(rc_handle, label, ctype, p_msg);
+     }
+ }
+ 
+ static void handle_rc_features(void)
+ {
+-    esp_avrc_ct_cb_param_t param;
+-    memset(&param, 0, sizeof(esp_avrc_ct_cb_param_t));
+-    param.rmt_feats.feat_mask = btc_rc_vb.rc_features;
+-    memcpy(param.rmt_feats.remote_bda, btc_rc_vb.rc_addr, sizeof(esp_bd_addr_t));
+-    btc_avrc_ct_cb_to_app(ESP_AVRC_CT_REMOTE_FEATURES_EVT, &param);
++    if ((btc_rc_cb.rc_features & BTA_AV_FEAT_RCTG) &&
++        (btc_rc_cb.rc_tg_features != 0)) {
++        esp_avrc_ct_cb_param_t param;
++        memset(&param, 0, sizeof(esp_avrc_ct_cb_param_t));
++        param.rmt_feats.feat_mask = btc_rc_cb.rc_features;
++        param.rmt_feats.tg_feat_flag = btc_rc_cb.rc_tg_features;
++        memcpy(param.rmt_feats.remote_bda, btc_rc_cb.rc_addr, sizeof(esp_bd_addr_t));
++        btc_avrc_ct_cb_to_app(ESP_AVRC_CT_REMOTE_FEATURES_EVT, &param);
++    }
++
++    if ((btc_rc_cb.rc_features & BTA_AV_FEAT_RCCT) &&
++        (btc_rc_cb.rc_ct_features != 0)) {
++        esp_avrc_tg_cb_param_t param;
++        memset(&param, 0, sizeof(esp_avrc_tg_cb_param_t));
++        param.rmt_feats.feat_mask = btc_rc_cb.rc_features;
++        param.rmt_feats.ct_feat_flag = btc_rc_cb.rc_ct_features;
++        memcpy(param.rmt_feats.remote_bda, btc_rc_cb.rc_addr, sizeof(esp_bd_addr_t));
++        btc_avrc_tg_cb_to_app(ESP_AVRC_TG_REMOTE_FEATURES_EVT, &param);
++    }
+ }
+ 
+ 
+@@ -143,40 +469,50 @@ static void handle_rc_connect (tBTA_AV_RC_OPEN *p_rc_open)
+ 
+     if (p_rc_open->status == BTA_AV_SUCCESS) {
+         //check if already some RC is connected
+-        if (btc_rc_vb.rc_connected) {
++        if (btc_rc_cb.rc_connected) {
+             BTC_TRACE_ERROR("Got RC OPEN in connected state, Connected RC: %d \
+-                and Current RC: %d", btc_rc_vb.rc_handle, p_rc_open->rc_handle );
+-            if ((btc_rc_vb.rc_handle != p_rc_open->rc_handle)
+-                    && (bdcmp(btc_rc_vb.rc_addr, p_rc_open->peer_addr))) {
++                and Current RC: %d", btc_rc_cb.rc_handle, p_rc_open->rc_handle );
++            if ((btc_rc_cb.rc_handle != p_rc_open->rc_handle)
++                    && (bdcmp(btc_rc_cb.rc_addr, p_rc_open->peer_addr))) {
+                 BTC_TRACE_DEBUG("Got RC connected for some other handle");
+                 BTA_AvCloseRc(p_rc_open->rc_handle);
+                 return;
+             }
+         }
+-        memcpy(btc_rc_vb.rc_addr, p_rc_open->peer_addr, sizeof(BD_ADDR));
+-        btc_rc_vb.rc_features = p_rc_open->peer_features;
+-        btc_rc_vb.rc_vol_label = MAX_LABEL;
+-        btc_rc_vb.rc_volume = MAX_VOLUME;
++        memcpy(btc_rc_cb.rc_addr, p_rc_open->peer_addr, sizeof(BD_ADDR));
++        btc_rc_cb.rc_features = p_rc_open->peer_features;
++        btc_rc_cb.rc_connected = TRUE;
++        btc_rc_cb.rc_handle = p_rc_open->rc_handle;
+ 
+-        btc_rc_vb.rc_connected = TRUE;
+-        btc_rc_vb.rc_handle = p_rc_open->rc_handle;
++        bdcpy(rc_addr.address, btc_rc_cb.rc_addr);
+ 
+-        bdcpy(rc_addr.address, btc_rc_vb.rc_addr);
++        // callback to application
++        if (p_rc_open->peer_features & BTA_AV_FEAT_RCTG) {
++            esp_avrc_ct_cb_param_t param;
++            memset(&param, 0, sizeof(esp_avrc_ct_cb_param_t));
++            param.conn_stat.connected = true;
++            memcpy(param.conn_stat.remote_bda, &rc_addr, sizeof(esp_bd_addr_t));
++            btc_avrc_ct_cb_to_app(ESP_AVRC_CT_CONNECTION_STATE_EVT, &param);
++        }
+ 
+-        esp_avrc_ct_cb_param_t param;
+-        memset(&param, 0, sizeof(esp_avrc_ct_cb_param_t));
+-        param.conn_stat.connected = true;
+-        memcpy(param.conn_stat.remote_bda, &rc_addr, sizeof(esp_bd_addr_t));
+-        btc_avrc_ct_cb_to_app(ESP_AVRC_CT_CONNECTION_STATE_EVT, &param);
++        if (p_rc_open->peer_features & BTA_AV_FEAT_RCCT) {
++            esp_avrc_tg_cb_param_t param;
++            memset(&param, 0, sizeof(esp_avrc_tg_cb_param_t));
++            param.conn_stat.connected = true;
++            memcpy(param.conn_stat.remote_bda, &rc_addr, sizeof(esp_bd_addr_t));
++            btc_avrc_tg_cb_to_app(ESP_AVRC_TG_CONNECTION_STATE_EVT, &param);
++        }
+ 
+         /* on locally initiated connection we will get remote features as part of connect */
+         if (p_rc_open->sdp_disc_done == TRUE) {
++            btc_rc_cb.rc_ct_features = p_rc_open->peer_ct_features;
++            btc_rc_cb.rc_tg_features = p_rc_open->peer_tg_features;
+             handle_rc_features();
+         }
+     } else {
+         BTC_TRACE_ERROR("%s Connect failed with error code: %d",
+-                  __FUNCTION__, p_rc_open->status);
+-        btc_rc_vb.rc_connected = FALSE;
++                        __FUNCTION__, p_rc_open->status);
++        btc_rc_cb.rc_connected = FALSE;
+     }
+ }
+ 
+@@ -190,37 +526,44 @@ static void handle_rc_connect (tBTA_AV_RC_OPEN *p_rc_open)
+  ***************************************************************************/
+ static void handle_rc_disconnect (tBTA_AV_RC_CLOSE *p_rc_close)
+ {
+-    bt_bdaddr_t rc_addr;
+-
+     BTC_TRACE_DEBUG("%s: rc_handle: %d", __FUNCTION__, p_rc_close->rc_handle);
+-    if ((p_rc_close->rc_handle != btc_rc_vb.rc_handle)
+-            && (bdcmp(btc_rc_vb.rc_addr, p_rc_close->peer_addr))) {
++    if ((p_rc_close->rc_handle != btc_rc_cb.rc_handle)
++            && (bdcmp(btc_rc_cb.rc_addr, p_rc_close->peer_addr))) {
+         BTC_TRACE_ERROR("Got disconnect of unknown device");
+         return;
+     }
+ 
+-    btc_rc_vb.rc_handle = 0;
+-    btc_rc_vb.rc_connected = FALSE;
+-    memcpy(btc_rc_vb.rc_addr, p_rc_close->peer_addr, sizeof(BD_ADDR));
+-    memset(btc_rc_vb.rc_notif, 0, sizeof(btc_rc_vb.rc_notif));
++    tBTA_AV_FEAT rc_features = btc_rc_cb.rc_features;
+ 
+-    btc_rc_vb.rc_features = 0;
+-    btc_rc_vb.rc_vol_label = MAX_LABEL;
+-    btc_rc_vb.rc_volume = MAX_VOLUME;
++    // clean up the state
++    btc_rc_cb.rc_handle = 0;
++    btc_rc_cb.rc_connected = FALSE;
+ 
+-    bdcpy(rc_addr.address, btc_rc_vb.rc_addr);
+-
+-    memset(btc_rc_vb.rc_addr, 0, sizeof(BD_ADDR));
++    btc_rc_cb.rc_features = 0;
++    btc_rc_cb.rc_ct_features = 0;
++    btc_rc_cb.rc_tg_features = 0;
++    memset(btc_rc_cb.rc_addr, 0, sizeof(BD_ADDR));
++    memset(btc_rc_cb.rc_ntf, 0, sizeof(btc_rc_cb.rc_ntf));
+ 
+     /* report connection state */
+-    esp_avrc_ct_cb_param_t param;
+-    memset(&param, 0, sizeof(esp_avrc_ct_cb_param_t));
+-    param.conn_stat.connected = false;
+-    memcpy(param.conn_stat.remote_bda, &rc_addr, sizeof(esp_bd_addr_t));
+-    btc_avrc_ct_cb_to_app(ESP_AVRC_CT_CONNECTION_STATE_EVT, &param);
++    if (rc_features & BTA_AV_FEAT_RCTG) {
++        esp_avrc_ct_cb_param_t param;
++        memset(&param, 0, sizeof(esp_avrc_ct_cb_param_t));
++        param.conn_stat.connected = false;
++        memcpy(param.conn_stat.remote_bda, btc_rc_cb.rc_addr, sizeof(esp_bd_addr_t));
++        btc_avrc_ct_cb_to_app(ESP_AVRC_CT_CONNECTION_STATE_EVT, &param);
++    }
++
++    if (rc_features & BTA_AV_FEAT_RCCT) {
++        esp_avrc_tg_cb_param_t param;
++        memset(&param, 0, sizeof(esp_avrc_ct_cb_param_t));
++        param.conn_stat.connected = false;
++        memcpy(param.conn_stat.remote_bda, btc_rc_cb.rc_addr, sizeof(esp_bd_addr_t));
++        btc_avrc_tg_cb_to_app(ESP_AVRC_TG_CONNECTION_STATE_EVT, &param);
++    }
+ }
+ 
+-static void handle_rc_attributes_rsp ( tAVRC_MSG_VENDOR *vendor_msg)
++static void handle_rc_attributes_rsp (tAVRC_MSG_VENDOR *vendor_msg)
+ {
+     uint8_t attr_count = vendor_msg->p_vendor_data[4];
+     int attr_index = 5;
+@@ -255,49 +598,263 @@ static void handle_rc_attributes_rsp ( tAVRC_MSG_VENDOR *vendor_msg)
+     }
+ }
+ 
+-static void handle_rc_notification_rsp ( tAVRC_MSG_VENDOR *vendor_msg)
++static void handle_rc_notification_rsp (tAVRC_MSG_VENDOR *vendor_msg)
+ {
+     esp_avrc_ct_cb_param_t param;
++    memset(&param, 0, sizeof(esp_avrc_ct_cb_param_t));
+ 
+     param.change_ntf.event_id = vendor_msg->p_vendor_data[4];
+ 
+-    param.change_ntf.event_parameter = vendor_msg->p_vendor_data[5] << 24 | vendor_msg->p_vendor_data[6] << 16 |
+-                                       vendor_msg->p_vendor_data[7] << 8 | vendor_msg->p_vendor_data[8];
++    uint8_t *data = &vendor_msg->p_vendor_data[5];
++    if (!btc_avrc_ct_rn_evt_supported(param.change_ntf.event_id)) {
++        BTC_TRACE_WARNING("%s unsupported notification on CT, event id 0x%x", __FUNCTION__,
++                          param.change_ntf.event_id);
++        return;
++    }
+ 
++    switch (param.change_ntf.event_id) {
++    case ESP_AVRC_RN_PLAY_STATUS_CHANGE:
++        BE_STREAM_TO_UINT8(param.change_ntf.event_parameter.playback, data);
++        break;
++    case ESP_AVRC_RN_TRACK_CHANGE:
++        memcpy(param.change_ntf.event_parameter.elm_id, data, 8);
++        break;
++    case ESP_AVRC_RN_PLAY_POS_CHANGED:
++        BE_STREAM_TO_UINT32(param.change_ntf.event_parameter.play_pos, data);
++        break;
++    case ESP_AVRC_RN_BATTERY_STATUS_CHANGE:
++        BE_STREAM_TO_UINT8(param.change_ntf.event_parameter.batt, data);
++        break;
++    case ESP_AVRC_RN_VOLUME_CHANGE:
++        BE_STREAM_TO_UINT8(param.change_ntf.event_parameter.volume, data);
++        break;
++    // for non-parameter event response
++    case ESP_AVRC_RN_TRACK_REACHED_END:
++    case ESP_AVRC_RN_TRACK_REACHED_START:
++        break;
++    // for other unsupported event:
++    case ESP_AVRC_RN_SYSTEM_STATUS_CHANGE:
++    case ESP_AVRC_RN_APP_SETTING_CHANGE:
++    case ESP_AVRC_RN_NOW_PLAYING_CHANGE:
++    case ESP_AVRC_RN_AVAILABLE_PLAYERS_CHANGE:
++    case ESP_AVRC_RN_ADDRESSED_PLAYER_CHANGE:
++    case ESP_AVRC_RN_UIDS_CHANGE:
++    default:
++        BTC_TRACE_WARNING("%s RC unhandled notification response, event id 0x%x", __FUNCTION__,
++                          param.change_ntf.event_id);
++        break;
++    }
+     btc_avrc_ct_cb_to_app(ESP_AVRC_CT_CHANGE_NOTIFY_EVT, &param);
+ }
+ 
++static void handle_rc_get_caps_rsp (tAVRC_GET_CAPS_RSP *rsp)
++{
++    if (rsp->capability_id == AVRC_CAP_EVENTS_SUPPORTED) {
++        esp_avrc_ct_cb_param_t param;
++        memset(&param, 0, sizeof(esp_avrc_ct_cb_param_t));
++        param.get_rn_caps_rsp.cap_count = rsp->count;
++        for (int i = 0; i < rsp->count; ++i) {
++            esp_avrc_rn_evt_bit_mask_operation(ESP_AVRC_BIT_MASK_OP_SET, &param.get_rn_caps_rsp.evt_set,
++                                               rsp->param.event_id[i]);
++        }
++        btc_avrc_ct_cb_to_app(ESP_AVRC_CT_GET_RN_CAPABILITIES_RSP_EVT, &param);
++    } else {
++        // ignore other capability_id
++        BTC_TRACE_WARNING("AVRC unhandled event, CapabilityID: 0x%x", rsp->capability_id);
++        return;
++    }
++}
++
+ /***************************************************************************
+- *  Function       handle_rc_metadata_rsp
++ *  Function       handle_rc_metamsg_cmd
++ *
++ *  - Argument:    tBTA_AV_VENDOR Structure containing the received
++ *                          metamsg command
++ *
++ *  - Description: Remote control metamsg command handler (AVRCP 1.3)
++ *
++ ***************************************************************************/
++static void handle_rc_metamsg_cmd (tBTA_AV_META_MSG *p_meta_msg)
++{
++    BTC_TRACE_DEBUG("%s, opcode 0x%x, len %d, code %d", __FUNCTION__, p_meta_msg->p_msg->hdr.opcode, p_meta_msg->len, p_meta_msg->code);
++
++    if (p_meta_msg->p_msg->hdr.opcode != AVRC_OP_VENDOR) {
++        BTC_TRACE_WARNING("Invalid opcode: %x", p_meta_msg->p_msg->hdr.opcode);
++        return;
++    }
++    if (p_meta_msg->len < 3) {
++        BTC_TRACE_WARNING("Invalid length.Opcode: 0x%x, len: 0x%x", p_meta_msg->p_msg->hdr.opcode,
++                          p_meta_msg->len);
++        return;
++    }
++
++    if (p_meta_msg->code >= AVRC_RSP_NOT_IMPL) {
++#if (AVRC_ADV_CTRL_INCLUDED == TRUE)
++        handle_rc_metamsg_rsp(p_meta_msg);
++#else
++        BTC_TRACE_WARNING("%s:Received vendor dependent rsp. code: %d len: %d. Not processing it.",
++                          __FUNCTION__, p_meta_msg->code, p_meta_msg->len);
++#endif
++        return;
++    }
++
++#define RC_CMD_PRS_BUF_LEN  (512)
++    uint8_t *buf = (uint8_t *)osi_calloc(RC_CMD_PRS_BUF_LEN);
++    tAVRC_COMMAND avrc_command = {0};
++    tAVRC_STS status;
++
++    status = AVRC_ParsCommand(p_meta_msg->p_msg, &avrc_command, buf, RC_CMD_PRS_BUF_LEN);
++    BTC_TRACE_DEBUG("Rcv vendor cmd: code %d, PDU 0x%x, label %d", p_meta_msg->code,
++                    avrc_command.cmd.pdu, p_meta_msg->label);
++
++    if (status != AVRC_STS_NO_ERROR) {
++        /* return error */
++        BTC_TRACE_WARNING("%s: Error in parsing vendor command. status: 0x%02x",
++                          __FUNCTION__, status);
++        send_reject_response(p_meta_msg->rc_handle, p_meta_msg->label, avrc_command.pdu, status);
++    } else {
++        btc_rc_upstreams_evt(avrc_command.cmd.pdu, &avrc_command, p_meta_msg->code, p_meta_msg->label);
++    }
++
++    osi_free(buf);
++}
++
++/*******************************************************************************
++**
++** Function         btc_rc_upstreams_evt
++**
++** Description      Executes AVRC UPSTREAMS events in btc context.
++**
++** Returns          void
++**
++*******************************************************************************/
++static void btc_rc_upstreams_evt(UINT16 event, tAVRC_COMMAND *pavrc_cmd, UINT8 ctype, UINT8 label)
++{
++    BTC_TRACE_EVENT("%s pdu: 0x%x handle: 0x%x ctype:%x label:%x", __FUNCTION__,
++                    pavrc_cmd->pdu, btc_rc_cb.rc_handle, ctype, label);
++
++    switch (event) {
++    case AVRC_PDU_SET_ABSOLUTE_VOLUME: {
++        // set up response
++        tAVRC_RESPONSE avrc_rsp;
++        BTC_TRACE_EVENT("%s() AVRC_PDU_SET_ABSOLUTE_VOLUME", __FUNCTION__);
++        memset(&(avrc_rsp.volume), 0, sizeof(tAVRC_RSP));
++        avrc_rsp.volume.opcode = opcode_from_pdu(AVRC_PDU_SET_ABSOLUTE_VOLUME);
++        avrc_rsp.volume.pdu = AVRC_PDU_SET_ABSOLUTE_VOLUME;
++        avrc_rsp.volume.status = AVRC_STS_NO_ERROR;
++        avrc_rsp.volume.volume = pavrc_cmd->volume.volume;
++        send_metamsg_rsp(btc_rc_cb.rc_handle, label, ctype, &avrc_rsp);
++
++        // set up callback
++        esp_avrc_tg_cb_param_t param;
++        memset(&param, 0, sizeof(esp_avrc_tg_cb_param_t));
++        param.set_abs_vol.volume = pavrc_cmd->volume.volume;
++        btc_avrc_tg_cb_to_app(ESP_AVRC_TG_SET_ABSOLUTE_VOLUME_CMD_EVT, &param);
++    }
++    break;
++    case AVRC_PDU_GET_PLAY_STATUS:
++    case AVRC_PDU_GET_ELEMENT_ATTR:
++    case AVRC_PDU_INFORM_DISPLAY_CHARSET:
++    //todo: check the valid response for these PDUs
++    case AVRC_PDU_LIST_PLAYER_APP_ATTR:
++    case AVRC_PDU_LIST_PLAYER_APP_VALUES:
++    case AVRC_PDU_GET_CUR_PLAYER_APP_VALUE:
++    case AVRC_PDU_SET_PLAYER_APP_VALUE:
++    case AVRC_PDU_GET_PLAYER_APP_ATTR_TEXT:
++    case AVRC_PDU_GET_PLAYER_APP_VALUE_TEXT: {
++        send_reject_response (btc_rc_cb.rc_handle, label, pavrc_cmd->pdu, AVRC_STS_BAD_CMD);
++    }
++    break;
++    case AVRC_PDU_REGISTER_NOTIFICATION: {
++        UINT8 event_id = pavrc_cmd->reg_notif.event_id;
++        if (event_id > MAX_RC_NOTIFICATIONS) {
++            BTC_TRACE_WARNING("Invalid event_id: 0x%x", event_id);
++            break;
++        }
++
++        btc_rc_cb.rc_ntf[event_id - 1].registered = TRUE;
++        btc_rc_cb.rc_ntf[event_id - 1].label = label;
++        BTC_TRACE_EVENT("%s: New registerd notification: event_id:0x%x, label:0x%x",
++                        __FUNCTION__, event_id, label);
++
++        // set up callback
++        esp_avrc_tg_cb_param_t param;
++        memset(&param, 0, sizeof(esp_avrc_tg_cb_param_t));
++        param.reg_ntf.event_id = pavrc_cmd->reg_notif.event_id;
++        param.reg_ntf.event_parameter = pavrc_cmd->reg_notif.param;
++        btc_avrc_tg_cb_to_app(ESP_AVRC_TG_REGISTER_NOTIFICATION_EVT, &param);
++    }
++    break;
++    default: {
++        send_reject_response (btc_rc_cb.rc_handle, label, pavrc_cmd->pdu,
++                              (pavrc_cmd->pdu == AVRC_PDU_SEARCH) ? AVRC_STS_SEARCH_NOT_SUP : AVRC_STS_BAD_CMD);
++    }
++    break;
++    }
++    return;
++}
++
++/***************************************************************************
++ *  Function       handle_rc_metamsg_rsp
+  *
+  *  - Argument:    tBTA_AV_META_MSG metadata command response
+  *
+  *  - Description: Vendor metadata response handler
+  *
+  ***************************************************************************/
+-static void handle_rc_metadata_rsp ( tBTA_AV_META_MSG *p_remote_rsp)
++static void handle_rc_metamsg_rsp (tBTA_AV_META_MSG *p_meta_msg)
+ {
+-#if (AVRC_METADATA_INCLUDED == TRUE)
+-    tAVRC_MSG *avrc_msg = p_remote_rsp->p_msg;
+-    tAVRC_MSG_VENDOR *vendor_msg = &avrc_msg->vendor;
++    tAVRC_RESPONSE avrc_response = {0};
++    tAVRC_STS status;
++    tAVRC_MSG_VENDOR *vendor_msg = &p_meta_msg->p_msg->vendor;
++    BTC_TRACE_DEBUG("%s: opcode %d, pdu 0x%x, code %d", __FUNCTION__, p_meta_msg->p_msg->hdr.opcode, vendor_msg->p_vendor_data[0],
++                    p_meta_msg->code);
++    if ( p_meta_msg->p_msg->hdr.opcode != AVRC_OP_VENDOR) {
++        return;
++    }
++    if (p_meta_msg->code != AVRC_RSP_CHANGED &&
++            p_meta_msg->code != AVRC_RSP_INTERIM &&
++            p_meta_msg->code != AVRC_RSP_ACCEPT &&
++            p_meta_msg->code != AVRC_RSP_REJ &&
++            p_meta_msg->code != AVRC_RSP_NOT_IMPL &&
++            p_meta_msg->code != AVRC_RSP_IMPL_STBL) {
++        return;
++    }
++
++    // handle GET_ELEMENT_ATTR response
++    if (p_meta_msg->code == AVRC_RSP_IMPL_STBL &&
++            vendor_msg->p_vendor_data[0] == AVRC_PDU_GET_ELEMENT_ATTR) {
++        handle_rc_attributes_rsp(vendor_msg);
++        return;
++    }
++
++    status = AVRC_ParsResponse(p_meta_msg->p_msg, &avrc_response);
++    if (status != AVRC_STS_NO_ERROR) {
++        BTC_TRACE_WARNING("%s: code %d error 0x%x", __FUNCTION__, p_meta_msg->code, status);
++        return;
++    }
+ 
+-    //Check what type of metadata was received
+-    switch (vendor_msg->hdr.ctype) {
+-    case AVRC_RSP_CHANGED:
+-        if (vendor_msg->p_vendor_data[0] == AVRC_PDU_REGISTER_NOTIFICATION) {
++    tAVRC_MSG *avrc_msg = p_meta_msg->p_msg;
++    vendor_msg = &avrc_msg->vendor;
++    switch (avrc_response.rsp.pdu) {
++    case AVRC_PDU_REGISTER_NOTIFICATION:
++        if (vendor_msg->hdr.ctype == AVRC_RSP_CHANGED) {
+             handle_rc_notification_rsp(vendor_msg);
++        } else if (vendor_msg->hdr.ctype == AVRC_RSP_INTERIM) {
++            // ignore this response
+         }
+         break;
+-
+-    case AVRC_RSP_IMPL_STBL:
+-        if (vendor_msg->p_vendor_data[0] == AVRC_PDU_GET_ELEMENT_ATTR) {
+-            handle_rc_attributes_rsp(vendor_msg);
++    case AVRC_PDU_GET_ELEMENT_ATTR:
++        // todo: handle this PDU here
++        break;
++    case AVRC_PDU_GET_CAPABILITIES:
++        if (vendor_msg->hdr.ctype == AVRC_RSP_IMPL_STBL) {
++            handle_rc_get_caps_rsp(&avrc_response.get_caps);
+         }
+         break;
++    default:
++        BTC_TRACE_WARNING("%s: unhandled meta rsp: pdu 0x%x", __FUNCTION__, avrc_response.rsp.pdu);
+     }
+-#else
+-    BTC_TRACE_ERROR("%s AVRCP metadata is not enabled", __FUNCTION__);
+-#endif
+ }
+ 
+ /***************************************************************************
+@@ -312,7 +869,7 @@ static void handle_rc_passthrough_rsp ( tBTA_AV_REMOTE_RSP *p_remote_rsp)
+ {
+ #if (AVRC_CTLR_INCLUDED == TRUE)
+     const char *status;
+-    if (btc_rc_vb.rc_features & BTA_AV_FEAT_RCTG) {
++    if (btc_rc_cb.rc_features & BTA_AV_FEAT_RCTG) {
+         int key_state;
+         if (p_remote_rsp->key_state == AVRC_STATE_RELEASE) {
+             status = "released";
+@@ -342,6 +899,23 @@ static void handle_rc_passthrough_rsp ( tBTA_AV_REMOTE_RSP *p_remote_rsp)
+ #endif
+ }
+ 
++/***************************************************************************
++ *  Function       handle_rc_passthrough_cmd
++ *
++ *  - Argument:    tBTA_AV_RC rc_id   remote control command ID
++ *                 tBTA_AV_STATE key_state status of key press
++ *
++ *  - Description: Remote control command handler
++ *
++ ***************************************************************************/
++void handle_rc_passthrough_cmd ( tBTA_AV_REMOTE_CMD *p_remote_cmd)
++{
++    esp_avrc_tg_cb_param_t param;
++    memset(&param, 0, sizeof(esp_avrc_tg_cb_param_t));
++    param.psth_cmd.key_code = p_remote_cmd->rc_id;
++    param.psth_cmd.key_state = p_remote_cmd->key_state;
++    btc_avrc_tg_cb_to_app(ESP_AVRC_TG_PASSTHROUGH_CMD_EVT, &param);
++}
+ 
+ /***************************************************************************
+  **
+@@ -355,7 +929,7 @@ void btc_rc_handler(tBTA_AV_EVT event, tBTA_AV *p_data)
+     BTC_TRACE_DEBUG ("%s event:%s", __FUNCTION__, dump_rc_event(event));
+     switch (event) {
+     case BTA_AV_RC_OPEN_EVT: {
+-        BTC_TRACE_DEBUG("Peer_features:%x", p_data->rc_open.peer_features);
++        BTC_TRACE_DEBUG("RC open, peer_features:%x", p_data->rc_open.peer_features);
+         handle_rc_connect( &(p_data->rc_open) );
+     } break;
+ 
+@@ -366,25 +940,50 @@ void btc_rc_handler(tBTA_AV_EVT event, tBTA_AV *p_data)
+ #if (AVRC_CTLR_INCLUDED == TRUE)
+     case BTA_AV_REMOTE_RSP_EVT: {
+         BTC_TRACE_DEBUG("RSP: rc_id:0x%x key_state:%d", p_data->remote_rsp.rc_id,
+-                  p_data->remote_rsp.key_state);
++                        p_data->remote_rsp.key_state);
+         handle_rc_passthrough_rsp( (&p_data->remote_rsp) );
+     }
+     break;
+ #endif
+     case BTA_AV_RC_FEAT_EVT: {
+         BTC_TRACE_DEBUG("Peer_features:%x", p_data->rc_feat.peer_features);
+-        btc_rc_vb.rc_features = p_data->rc_feat.peer_features;
++        do {
++            // report connection state if connection state wasn't reported on BTA_AV_RC_OPEN_EVT
++            tBTA_AV_FEAT old_feats = btc_rc_cb.rc_features;
++            if ((p_data->rc_feat.peer_features & BTA_AV_FEAT_RCTG) &&
++                !(old_feats & BTA_AV_FEAT_RCTG)) {
++                esp_avrc_ct_cb_param_t param;
++                memset(&param, 0, sizeof(esp_avrc_ct_cb_param_t));
++                param.conn_stat.connected = true;
++                memcpy(param.conn_stat.remote_bda, btc_rc_cb.rc_addr, sizeof(esp_bd_addr_t));
++                btc_avrc_ct_cb_to_app(ESP_AVRC_CT_CONNECTION_STATE_EVT, &param);
++            }
++            if ((p_data->rc_feat.peer_features & BTA_AV_FEAT_RCCT) &&
++                !(old_feats & BTA_AV_FEAT_RCCT)) {
++                esp_avrc_tg_cb_param_t param;
++                memset(&param, 0, sizeof(esp_avrc_ct_cb_param_t));
++                param.conn_stat.connected = true;
++                memcpy(param.conn_stat.remote_bda, btc_rc_cb.rc_addr, sizeof(esp_bd_addr_t));
++                btc_avrc_tg_cb_to_app(ESP_AVRC_CT_CONNECTION_STATE_EVT, &param);
++            }
++        } while (0);
++        btc_rc_cb.rc_features = p_data->rc_feat.peer_features;
++        btc_rc_cb.rc_ct_features = p_data->rc_feat.peer_ct_features;
++        btc_rc_cb.rc_tg_features = p_data->rc_feat.peer_tg_features;
+         handle_rc_features();
+     }
+     break;
+ 
+     case BTA_AV_META_MSG_EVT: {
+-        handle_rc_metadata_rsp(&(p_data->meta_msg));
++        handle_rc_metamsg_cmd(&(p_data->meta_msg));
++    }
++    break;
++    case BTA_AV_REMOTE_CMD_EVT: {
++        BTC_TRACE_DEBUG("rc_id:0x%x key_state:%d", p_data->remote_cmd.rc_id,
++                        p_data->remote_cmd.key_state);
++        handle_rc_passthrough_cmd(&p_data->remote_cmd);
+     }
+     break;
+-
+-    // below events are not handled for now
+-    case BTA_AV_REMOTE_CMD_EVT:
+     default:
+         BTC_TRACE_DEBUG("Unhandled RC event : 0x%x", event);
+     }
+@@ -399,8 +998,8 @@ void btc_rc_handler(tBTA_AV_EVT event, tBTA_AV *p_data)
+  ***************************************************************************/
+ BOOLEAN btc_rc_get_connected_peer(BD_ADDR peer_addr)
+ {
+-    if (btc_rc_vb.rc_connected == TRUE) {
+-        bdcpy(peer_addr, btc_rc_vb.rc_addr);
++    if (btc_rc_cb.rc_connected == TRUE) {
++        bdcpy(peer_addr, btc_rc_cb.rc_addr);
+         return TRUE;
+     }
+     return FALSE;
+@@ -414,7 +1013,7 @@ BOOLEAN btc_rc_get_connected_peer(BD_ADDR peer_addr)
+ **
+ ** Function         btc_avrc_ct_init
+ **
+-** Description      Initializes the AVRC interface
++** Description      Initializes the AVRC Controller interface
+ **
+ ** Returns          esp_err_t
+ **
+@@ -422,16 +1021,24 @@ BOOLEAN btc_rc_get_connected_peer(BD_ADDR peer_addr)
+ static void btc_avrc_ct_init(void)
+ {
+     BTC_TRACE_DEBUG("## %s ##", __FUNCTION__);
++    if (s_rc_ct_init == BTC_RC_CT_INIT_MAGIC) {
++        BTC_TRACE_WARNING("%s already initialized", __FUNCTION__);
++        return;
++    }
+ 
+-    memset (&btc_rc_vb, 0, sizeof(btc_rc_vb));
+-    btc_rc_vb.rc_vol_label = MAX_LABEL;
+-    btc_rc_vb.rc_volume = MAX_VOLUME;
++    /// initialize CT-specific resources
++    s_rc_ct_init = BTC_RC_CT_INIT_MAGIC;
++
++    /// initialize CT-TG shared resources
++    if (s_rc_tg_init != BTC_RC_TG_INIT_MAGIC) {
++        memset (&btc_rc_cb, 0, sizeof(btc_rc_cb));
++    }
+ }
+ 
+ 
+ /***************************************************************************
+ **
+-** Function         cleanup_ctrl
++** Function         btc_avrc_ct_deinit
+ **
+ ** Description      Closes the AVRC Controller interface
+ **
+@@ -442,7 +1049,19 @@ static void btc_avrc_ct_deinit(void)
+ {
+     BTC_TRACE_API("## %s ##", __FUNCTION__);
+ 
+-    memset(&btc_rc_vb, 0, sizeof(btc_rc_cb_t));
++    if (s_rc_ct_init != BTC_RC_CT_INIT_MAGIC) {
++        BTC_TRACE_WARNING("%s not initialized", __FUNCTION__);
++        return;
++    }
++
++    /// deinit CT-specific resources
++    s_rc_ct_init = 0;
++
++    /// deinit CT-TG shared resources
++    if (s_rc_tg_init != BTC_RC_TG_INIT_MAGIC) {
++        memset (&btc_rc_cb, 0, sizeof(btc_rc_cb));
++    }
++
+     BTC_TRACE_API("## %s ## completed", __FUNCTION__);
+ }
+ 
+@@ -468,8 +1087,41 @@ static bt_status_t btc_avrc_ct_send_set_player_value_cmd(uint8_t tl, uint8_t att
+ 
+     status = AVRC_BldCommand(&avrc_cmd, &p_msg);
+     if (status == AVRC_STS_NO_ERROR) {
+-        if (btc_rc_vb.rc_features & BTA_AV_FEAT_METADATA) {
+-            BTA_AvMetaCmd(btc_rc_vb.rc_handle, tl, BTA_AV_CMD_CTRL, p_msg);
++        if (btc_rc_cb.rc_features & BTA_AV_FEAT_METADATA) {
++            BTA_AvMetaCmd(btc_rc_cb.rc_handle, tl, BTA_AV_CMD_CTRL, p_msg);
++            status = BT_STATUS_SUCCESS;
++        } else {
++            status = BT_STATUS_FAIL;
++            BTC_TRACE_DEBUG("%s: feature not supported", __FUNCTION__);
++        }
++    }
++
++#else
++    BTC_TRACE_DEBUG("%s: feature not enabled", __FUNCTION__);
++#endif
++
++    return status;
++}
++
++static bt_status_t btc_avrc_ct_send_get_rn_caps_cmd(uint8_t tl)
++{
++    tAVRC_STS status = BT_STATUS_UNSUPPORTED;
++
++#if (AVRC_METADATA_INCLUDED == TRUE)
++    CHECK_ESP_RC_CONNECTED;
++
++    tAVRC_COMMAND avrc_cmd = {0};
++    BT_HDR *p_msg = NULL;
++
++    avrc_cmd.get_caps.opcode = AVRC_OP_VENDOR;
++    avrc_cmd.get_caps.status = AVRC_STS_NO_ERROR;
++    avrc_cmd.get_caps.pdu = AVRC_PDU_GET_CAPABILITIES;
++    avrc_cmd.get_caps.capability_id = AVRC_CAP_EVENTS_SUPPORTED;
++
++    status = AVRC_BldCommand(&avrc_cmd, &p_msg);
++    if (status == AVRC_STS_NO_ERROR) {
++        if (btc_rc_cb.rc_features & BTA_AV_FEAT_METADATA) {
++            BTA_AvMetaCmd(btc_rc_cb.rc_handle, tl, AVRC_CMD_STATUS, p_msg);
+             status = BT_STATUS_SUCCESS;
+         } else {
+             status = BT_STATUS_FAIL;
+@@ -502,8 +1154,8 @@ static bt_status_t btc_avrc_ct_send_register_notification_cmd(uint8_t tl, uint8_
+ 
+     status = AVRC_BldCommand(&avrc_cmd, &p_msg);
+     if (status == AVRC_STS_NO_ERROR) {
+-        if (btc_rc_vb.rc_features & BTA_AV_FEAT_METADATA) {
+-            BTA_AvMetaCmd(btc_rc_vb.rc_handle, tl, AVRC_CMD_NOTIF, p_msg);
++        if (btc_rc_cb.rc_features & BTA_AV_FEAT_METADATA) {
++            BTA_AvMetaCmd(btc_rc_cb.rc_handle, tl, AVRC_CMD_NOTIF, p_msg);
+             status = BT_STATUS_SUCCESS;
+         } else {
+             status = BT_STATUS_FAIL;
+@@ -544,8 +1196,8 @@ static bt_status_t btc_avrc_ct_send_metadata_cmd (uint8_t tl, uint8_t attr_mask)
+ 
+     status = AVRC_BldCommand(&avrc_cmd, &p_msg);
+     if (status == AVRC_STS_NO_ERROR) {
+-        if (btc_rc_vb.rc_features & BTA_AV_FEAT_METADATA) {
+-            BTA_AvMetaCmd(btc_rc_vb.rc_handle, tl, AVRC_CMD_STATUS, p_msg);
++        if (btc_rc_cb.rc_features & BTA_AV_FEAT_METADATA) {
++            BTA_AvMetaCmd(btc_rc_cb.rc_handle, tl, AVRC_CMD_STATUS, p_msg);
+             status = BT_STATUS_SUCCESS;
+         } else {
+             status = BT_STATUS_FAIL;
+@@ -567,9 +1219,9 @@ static bt_status_t btc_avrc_ct_send_passthrough_cmd(uint8_t tl, uint8_t key_code
+ #if (AVRC_CTLR_INCLUDED == TRUE)
+     CHECK_ESP_RC_CONNECTED;
+     BTC_TRACE_DEBUG("%s: key-code: %d, key-state: %d", __FUNCTION__,
+-              key_code, key_state);
+-    if (btc_rc_vb.rc_features & BTA_AV_FEAT_RCTG) {
+-        BTA_AvRemoteCmd(btc_rc_vb.rc_handle, tl,
++                    key_code, key_state);
++    if (btc_rc_cb.rc_features & BTA_AV_FEAT_RCTG) {
++        BTA_AvRemoteCmd(btc_rc_cb.rc_handle, tl,
+                         (tBTA_AV_RC)key_code, (tBTA_AV_STATE)key_state);
+         status =  BT_STATUS_SUCCESS;
+         BTC_TRACE_API("%s: succesfully sent passthrough command to BTA", __FUNCTION__);
+@@ -584,16 +1236,113 @@ static bt_status_t btc_avrc_ct_send_passthrough_cmd(uint8_t tl, uint8_t key_code
+     return status;
+ }
+ 
+-void btc_avrc_call_handler(btc_msg_t *msg)
++
++/*******************************************************************************
++**
++** Function         btc_avrc_tg_init
++**
++** Description      Initializes the AVRC Target interface
++**
++** Returns          esp_err_t
++**
++*******************************************************************************/
++static void btc_avrc_tg_init(void)
++{
++    BTC_TRACE_DEBUG("## %s ##", __FUNCTION__);
++    if (s_rc_tg_init == BTC_RC_TG_INIT_MAGIC) {
++        BTC_TRACE_WARNING("%s already initialized", __FUNCTION__);
++        return;
++    }
++
++    /// initialize TG-specific resources
++    memcpy(s_psth_supported_cmd, cs_psth_dft_supported_cmd, sizeof(s_psth_supported_cmd));
++    s_rn_supported_evt = cs_rn_dft_supported_evt;
++
++    /// initialize CT-TG shared resources
++    if (s_rc_ct_init != BTC_RC_CT_INIT_MAGIC) {
++        memset (&btc_rc_cb, 0, sizeof(btc_rc_cb));
++    }
++
++    s_rc_tg_init = BTC_RC_TG_INIT_MAGIC;
++}
++
++
++/***************************************************************************
++**
++** Function         btc_avrc_tg_deinit
++**
++** Description      Closes the AVRC Target interface
++**
++** Returns          void
++**
++***************************************************************************/
++static void btc_avrc_tg_deinit(void)
++{
++    BTC_TRACE_API("## %s ##", __FUNCTION__);
++
++    if (s_rc_tg_init != BTC_RC_TG_INIT_MAGIC) {
++        BTC_TRACE_WARNING("%s not initialized", __FUNCTION__);
++        return;
++    }
++
++    /// deinit TG-specific resources
++    memset(s_psth_supported_cmd, 0, sizeof(s_psth_supported_cmd));
++    s_rn_supported_evt = 0;
++    s_rc_tg_init = 0;
++
++    /// deinit CT-TG shared resources
++    if (s_rc_ct_init != BTC_RC_CT_INIT_MAGIC) {
++        memset (&btc_rc_cb, 0, sizeof(btc_rc_cb));
++    }
++
++    BTC_TRACE_API("## %s ## completed", __FUNCTION__);
++}
++
++static void btc_avrc_tg_send_rn_rsp(esp_avrc_rn_event_ids_t event_id, esp_avrc_rn_rsp_t rsp, const esp_avrc_rn_param_t *param)
++{
++    tAVRC_RESPONSE avrc_rsp;
++    if (! btc_avrc_tg_connected_p()) {
++        BTC_TRACE_WARNING("%s, RC unconnected, operation fail, event_id 0x%x", __FUNCTION__, event_id);
++        return;
++    }
++
++    if (btc_rc_cb.rc_ntf[event_id - 1].registered == FALSE) {
++        BTC_TRACE_ERROR("Event id not registered: event_id = %x", event_id);
++        return;
++    }
++    memset(&(avrc_rsp.reg_notif), 0, sizeof(tAVRC_REG_NOTIF_RSP));
++    avrc_rsp.reg_notif.event_id = event_id;
++
++    switch (event_id) {
++    case ESP_AVRC_RN_VOLUME_CHANGE:
++        avrc_rsp.reg_notif.param.volume = param->volume;
++        break;
++    // todo: implement other event notifications
++    default:
++        BTC_TRACE_WARNING("%s : Unhandled event ID : 0x%x", __FUNCTION__, event_id);
++        return;
++    }
++
++    avrc_rsp.reg_notif.pdu = AVRC_PDU_REGISTER_NOTIFICATION;
++    avrc_rsp.reg_notif.opcode = opcode_from_pdu(AVRC_PDU_REGISTER_NOTIFICATION);
++    avrc_rsp.get_play_status.status = AVRC_STS_NO_ERROR;
++
++    /* Send the response. */
++    send_metamsg_rsp(btc_rc_cb.rc_handle, btc_rc_cb.rc_ntf[event_id - 1].label,
++                     ((rsp == ESP_AVRC_RN_RSP_INTERIM) ? AVRC_CMD_NOTIF : AVRC_RSP_CHANGED), &avrc_rsp);
++    return;
++}
++
++void btc_avrc_ct_call_handler(btc_msg_t *msg)
+ {
+     btc_avrc_args_t *arg = (btc_avrc_args_t *)(msg->arg);
+     switch (msg->act) {
+-    case BTC_AVRC_CTRL_API_INIT_EVT: {
++    case BTC_AVRC_CT_API_INIT_EVT: {
+         btc_avrc_ct_init();
+         // todo: callback to application
+         break;
+     }
+-    case BTC_AVRC_CTRL_API_DEINIT_EVT: {
++    case BTC_AVRC_CT_API_DEINIT_EVT: {
+         btc_avrc_ct_deinit();
+         // todo: callback to application
+         break;
+@@ -607,11 +1356,15 @@ void btc_avrc_call_handler(btc_msg_t *msg)
+         btc_avrc_ct_send_metadata_cmd(arg->md_cmd.tl, arg->md_cmd.attr_mask);
+         break;
+     }
++    case BTC_AVRC_STATUS_API_SND_GET_RN_CAPS_EVT: {
++        btc_avrc_ct_send_get_rn_caps_cmd(arg->get_caps_cmd.tl);
++        break;
++    }
+     case BTC_AVRC_NOTIFY_API_SND_REG_NOTIFY_EVT: {
+         btc_avrc_ct_send_register_notification_cmd(arg->rn_cmd.tl, arg->rn_cmd.event_id, arg->rn_cmd.event_parameter);
+         break;
+     }
+-    case BTC_AVRC_CTRL_API_SET_PLAYER_SETTING_EVT: {
++    case BTC_AVRC_CTRL_API_SND_SET_PLAYER_SETTING_EVT: {
+         btc_avrc_ct_send_set_player_value_cmd(arg->ps_cmd.tl, arg->ps_cmd.attr_id, arg->ps_cmd.value_id);
+         break;
+     }
+@@ -620,4 +1373,36 @@ void btc_avrc_call_handler(btc_msg_t *msg)
+     }
+ }
+ 
++void btc_avrc_tg_call_handler(btc_msg_t *msg)
++{
++    btc_avrc_tg_args_t *arg = (btc_avrc_tg_args_t *)(msg->arg);
++    switch (msg->act) {
++    case BTC_AVRC_TG_API_INIT_EVT: {
++        btc_avrc_tg_init();
++        break;
++    }
++    case BTC_AVRC_TG_API_DEINIT_EVT: {
++        btc_avrc_tg_deinit();
++        break;
++    }
++    case BTC_AVRC_TG_API_SET_RN_SUPPORTED_EVT: {
++        btc_avrc_tg_set_rn_supported_evt(arg->set_rn_evt);
++        break;
++    }
++    case BTC_AVRC_TG_API_SET_PSTH_SUPPORTED_CMD_EVT: {
++        btc_avrc_tg_set_supported_command(arg->set_psth_cmd);
++        break;
++    }
++    case BTC_AVRC_TG_API_SEND_RN_RSP_EVT: {
++        btc_avrc_tg_send_rn_rsp(arg->rn_rsp.event_id, arg->rn_rsp.rsp,
++                                &arg->rn_rsp.param);
++        break;
++    }
++    default:
++        BTC_TRACE_WARNING("%s : unhandled event: %d\n", __FUNCTION__, msg->act);
++    }
++
++    btc_avrc_tg_arg_deep_free(msg);
++}
++
+ #endif /* #if BTC_AV_INCLUDED */
+diff --git a/components/bt/bluedroid/btc/profile/std/include/btc_avrc.h b/components/bt/bluedroid/btc/profile/std/include/btc_avrc.h
+index 2a66b8b27..7eaabecc1 100644
+--- a/components/bt/bluedroid/btc/profile/std/include/btc_avrc.h
++++ b/components/bt/bluedroid/btc/profile/std/include/btc_avrc.h
+@@ -22,6 +22,8 @@
+ #include "common/bt_defs.h"
+ #include "stack/bt_types.h"
+ #include "bta/bta_av_api.h"
++#include "btc/btc_task.h"
++#include "esp_avrc_api.h"
+ 
+ #if (BTC_AV_INCLUDED == TRUE)
+ #ifndef BTC_AVRC_TGT_INCLUDED
+@@ -29,13 +31,14 @@
+ #endif
+ 
+ typedef enum {
+-    BTC_AVRC_CTRL_API_INIT_EVT = 0,
+-    BTC_AVRC_CTRL_API_DEINIT_EVT,
++    BTC_AVRC_CT_API_INIT_EVT = 0,
++    BTC_AVRC_CT_API_DEINIT_EVT,
+     BTC_AVRC_CTRL_API_SND_PTCMD_EVT,
+     BTC_AVRC_STATUS_API_SND_META_EVT,
+     BTC_AVRC_STATUS_API_SND_PLAY_STATUS_EVT,
++    BTC_AVRC_STATUS_API_SND_GET_RN_CAPS_EVT,
+     BTC_AVRC_NOTIFY_API_SND_REG_NOTIFY_EVT,
+-    BTC_AVRC_CTRL_API_SET_PLAYER_SETTING_EVT
++    BTC_AVRC_CTRL_API_SND_SET_PLAYER_SETTING_EVT
+ } btc_avrc_act_t;
+ 
+ typedef struct {
+@@ -61,18 +64,40 @@ typedef struct {
+     uint8_t value_id;
+ } ps_cmd_t;
+ 
++typedef struct {
++    uint8_t tl;
++} get_caps_cmd_t;
++
+ /* btc_avrc_args_t */
+ typedef union {
+     pt_cmd_t pt_cmd;
+     md_cmd_t md_cmd;
+     rn_cmd_t rn_cmd;
+     ps_cmd_t ps_cmd;
++    get_caps_cmd_t get_caps_cmd;
+ } btc_avrc_args_t;
+ 
+-/** BT-RC Controller callback structure. */
+-typedef void (* btrc_passthrough_rsp_callback) (int id, int key_state);
++/* btc_avrc_tg_act_t */
++typedef enum {
++    BTC_AVRC_TG_API_INIT_EVT = 0,
++    BTC_AVRC_TG_API_DEINIT_EVT,
++    BTC_AVRC_TG_API_SET_RN_SUPPORTED_EVT,
++    BTC_AVRC_TG_API_SET_PSTH_SUPPORTED_CMD_EVT,
++    BTC_AVRC_TG_API_SEND_RN_RSP_EVT,
++} btc_avrc_tg_act_t;
+ 
+-typedef void (* btrc_connection_state_callback) (bool state, bt_bdaddr_t *bd_addr);
++typedef struct {
++    esp_avrc_rn_event_ids_t event_id;
++    esp_avrc_rn_rsp_t rsp;
++    esp_avrc_rn_param_t param;
++} rn_rsp_t;
++
++/* btc_avrc_tg_args_t */
++typedef union {
++    rn_rsp_t rn_rsp;         /* BTC_AVRC_TG_API_SEND_RN_RSP_EVT */
++    uint16_t set_rn_evt;     /* BTC_AVRC_TG_API_SET_RN_SUPPORTED_EVT */
++    uint16_t *set_psth_cmd;   /* BTC_AVRC_TG_API_SET_PSTH_SUPPORTED_CMD_EVT */
++} btc_avrc_tg_args_t;
+ 
+ void btc_rc_handler(tBTA_AV_EVT event, tBTA_AV *p_data);
+ 
+@@ -81,7 +106,24 @@ BOOLEAN btc_rc_get_connected_peer(BD_ADDR peer_addr);
+ /*******************************************************************************
+ **  BTC AVRC API
+ ********************************************************************************/
+-void btc_avrc_call_handler(btc_msg_t *msg);
++void btc_avrc_ct_call_handler(btc_msg_t *msg);
++void btc_avrc_tg_call_handler(btc_msg_t *msg);
++void btc_avrc_tg_arg_deep_copy(btc_msg_t *msg, void *p_dest, void *p_src);
++
++bool btc_avrc_tg_init_p(void);
++bool btc_avrc_ct_init_p(void);
++bool btc_avrc_tg_connected_p(void);
++bool btc_avrc_ct_connected_p(void);
++
++const uint16_t *btc_avrc_tg_get_supported_command(void);
++const uint16_t *btc_avrc_tg_get_allowed_command(void);
++bool btc_avrc_tg_check_supported_command(const uint16_t *cmd_set);
++
++uint16_t btc_avrc_tg_get_rn_allowed_evt(void);
++uint16_t btc_avrc_tg_get_rn_supported_evt(void);
++bool btc_avrc_tg_check_rn_supported_evt(uint16_t evt_set);
++bool btc_avrc_tg_rn_evt_supported(uint8_t event_id);
++bool btc_avrc_ct_rn_evt_supported(uint8_t event_id);
+ 
+ #endif  ///BTC_AV_INCLUDED == TRUE
+ 
+diff --git a/components/bt/bluedroid/stack/avrc/avrc_bld_ct.c b/components/bt/bluedroid/stack/avrc/avrc_bld_ct.c
+index 122f971ed..181068706 100644
+--- a/components/bt/bluedroid/stack/avrc/avrc_bld_ct.c
++++ b/components/bt/bluedroid/stack/avrc/avrc_bld_ct.c
+@@ -237,6 +237,22 @@ static tAVRC_STS avrc_bld_get_element_attr_cmd (tAVRC_GET_ELEM_ATTRS_CMD *p_cmd,
+     return AVRC_STS_NO_ERROR;
+ }
+ 
++static tAVRC_STS avrc_bld_get_caps_cmd(tAVRC_GET_CAPS_CMD *p_cmd, BT_HDR *p_pkt)
++{
++    UINT8   *p_data, *p_start;
++
++    AVRC_TRACE_API("avrc_bld_get_caps");
++    /* get the existing length, if any, and also the num attributes */
++    // Set the notify value
++    p_start = (UINT8 *)(p_pkt + 1) + p_pkt->offset;
++    p_data = p_start + 2; /* pdu + rsvd */
++    /* add fixed length 1 */
++    UINT16_TO_BE_STREAM(p_data, 1);
++    /* capability id */
++    UINT8_TO_BE_STREAM(p_data, p_cmd->capability_id);
++    p_pkt->len = (p_data - p_start);
++    return AVRC_STS_NO_ERROR;
++}
+ /*******************************************************************************
+ **
+ ** Function         AVRC_BldCommand
+@@ -296,6 +312,9 @@ tAVRC_STS AVRC_BldCommand( tAVRC_COMMAND *p_cmd, BT_HDR **pp_pkt)
+     case AVRC_PDU_REGISTER_NOTIFICATION:      /* 0x31 */
+         status = avrc_bld_register_change_notfn(p_cmd->reg_notif.event_id, p_cmd->reg_notif.param, p_pkt);
+         break;
++    case AVRC_PDU_GET_CAPABILITIES:
++        status = avrc_bld_get_caps_cmd(&p_cmd->get_caps, p_pkt);
++        break;
+     }
+ 
+     if (alloc && (status != AVRC_STS_NO_ERROR) ) {
+diff --git a/components/bt/bluedroid/stack/avrc/avrc_bld_tg.c b/components/bt/bluedroid/stack/avrc/avrc_bld_tg.c
+index d7df3b451..796238298 100644
+--- a/components/bt/bluedroid/stack/avrc/avrc_bld_tg.c
++++ b/components/bt/bluedroid/stack/avrc/avrc_bld_tg.c
+@@ -593,6 +593,10 @@ static tAVRC_STS avrc_bld_notify_rsp (tAVRC_REG_NOTIF_RSP *p_rsp, BT_HDR *p_pkt)
+         }
+         break;
+ 
++    case AVRC_EVT_VOLUME_CHANGE:
++        UINT8_TO_BE_STREAM(p_data, p_rsp->param.volume);
++        len = 2;
++        break;
+     default:
+         status = AVRC_STS_BAD_PARAM;
+         AVRC_TRACE_ERROR("unknown event_id");
+@@ -652,6 +656,31 @@ tAVRC_STS avrc_bld_group_navigation_rsp (UINT16 navi_id, BT_HDR *p_pkt)
+     return AVRC_STS_NO_ERROR;
+ }
+ 
++/*******************************************************************************
++**
++** Function         avrc_bld_set_absolute_volume_rsp
++**
++** Description      This function builds the Set Absolute Volume command
++**                  response
++**
++** Returns          AVRC_STS_NO_ERROR, if the response is built successfully
++**                  Otherwise, the error code.
++**
++*******************************************************************************/
++tAVRC_STS avrc_bld_set_absolute_volume_rsp(tAVRC_SET_VOLUME_RSP *p_rsp, BT_HDR *p_pkt)
++{
++    UINT8   *p_data, *p_start;
++
++    p_start = (UINT8 *)(p_pkt + 1) + p_pkt->offset;
++    p_data = p_start + 2; /* pdu + rsvd */
++    UINT16_TO_BE_STREAM(p_data, 1); /* fixed length 1 */
++    UINT8_TO_BE_STREAM(p_data, p_rsp->volume);
++
++    p_pkt->len = (p_data - p_start);
++
++    return AVRC_STS_NO_ERROR;
++}
++
+ /*******************************************************************************
+ **
+ ** Function         avrc_bld_rejected_rsp
+@@ -842,9 +871,12 @@ tAVRC_STS AVRC_BldResponse( UINT8 handle, tAVRC_RESPONSE *p_rsp, BT_HDR **pp_pkt
+         status = avrc_bld_next_rsp(&p_rsp->continu, p_pkt);
+         break;
+ 
+-    case AVRC_PDU_ABORT_CONTINUATION_RSP:       /*          0x41 */
++    case AVRC_PDU_ABORT_CONTINUATION_RSP:       /*        0x41 */
+         status = avrc_bld_next_rsp(&p_rsp->abort, p_pkt);
+         break;
++    case AVRC_PDU_SET_ABSOLUTE_VOLUME:          /*        0x50 */
++        status = avrc_bld_set_absolute_volume_rsp(&p_rsp->volume, p_pkt);
++        break;
+     }
+ 
+     if (alloc && (status != AVRC_STS_NO_ERROR) ) {
+diff --git a/components/bt/bluedroid/stack/avrc/avrc_pars_ct.c b/components/bt/bluedroid/stack/avrc/avrc_pars_ct.c
+index b847e78a5..f185e7b56 100644
+--- a/components/bt/bluedroid/stack/avrc/avrc_pars_ct.c
++++ b/components/bt/bluedroid/stack/avrc/avrc_pars_ct.c
+@@ -90,9 +90,28 @@ static tAVRC_STS avrc_pars_vendor_rsp(tAVRC_MSG_VENDOR *p_msg, tAVRC_RESPONSE *p
+             p_result->reg_notif.event_id = eventid;
+             BE_STREAM_TO_UINT8 (p_result->reg_notif.param.volume, p);
+         }
+-        AVRC_TRACE_DEBUG("avrc_pars_vendor_rsp PDU reg notif response:event %x, volume %x", eventid,
+-                         p_result->reg_notif.param.volume);
++        // todo: parse the response for other event_ids
++        AVRC_TRACE_DEBUG("avrc_pars_vendor_rsp PDU reg notif response:event 0x%x", eventid);
++        break;
+ #endif /* (AVRC_ADV_CTRL_INCLUDED == TRUE) */
++    case AVRC_PDU_GET_CAPABILITIES:        /* 0x10 */
++        BE_STREAM_TO_UINT8 (p_result->get_caps.capability_id, p);
++        BE_STREAM_TO_UINT8 (p_result->get_caps.count, p);
++        if (p_result->get_caps.capability_id == AVRC_CAP_EVENTS_SUPPORTED) {
++            if (p_result->get_caps.count > AVRC_CAP_MAX_NUM_EVT_ID) {
++                status = AVRC_STS_INTERNAL_ERR;
++            } else {
++                BE_STREAM_TO_ARRAY(p, p_result->get_caps.param.event_id, p_result->get_caps.count);
++            }
++        } else if (p_result->get_caps.capability_id == AVRC_CAP_COMPANY_ID) {
++            if (p_result->get_caps.count > AVRC_CAP_MAX_NUM_COMP_ID) {
++                status = AVRC_STS_INTERNAL_ERR;
++            } else {
++                for (int i = 0; i < p_result->get_caps.count; ++i) {
++                    BE_STREAM_TO_UINT24(p_result->get_caps.param.company_id[i], p);
++                }
++            }
++        }
+         break;
+     default:
+         status = AVRC_STS_BAD_CMD;
+@@ -112,12 +131,10 @@ static tAVRC_STS avrc_pars_vendor_rsp(tAVRC_MSG_VENDOR *p_msg, tAVRC_RESPONSE *p
+ **                  Otherwise, the error code defined by AVRCP 1.4
+ **
+ *******************************************************************************/
+-tAVRC_STS AVRC_ParsResponse (tAVRC_MSG *p_msg, tAVRC_RESPONSE *p_result, UINT8 *p_buf, UINT16 buf_len)
++tAVRC_STS AVRC_ParsResponse (tAVRC_MSG *p_msg, tAVRC_RESPONSE *p_result)
+ {
+     tAVRC_STS  status = AVRC_STS_INTERNAL_ERR;
+     UINT16  id;
+-    UNUSED(p_buf);
+-    UNUSED(buf_len);
+ 
+     if (p_msg && p_result) {
+         switch (p_msg->hdr.opcode) {
+diff --git a/components/bt/bluedroid/stack/avrc/avrc_pars_tg.c b/components/bt/bluedroid/stack/avrc/avrc_pars_tg.c
+index c45019933..c30bf94a3 100644
+--- a/components/bt/bluedroid/stack/avrc/avrc_pars_tg.c
++++ b/components/bt/bluedroid/stack/avrc/avrc_pars_tg.c
+@@ -249,6 +249,9 @@ static tAVRC_STS avrc_pars_vendor_cmd(tAVRC_MSG_VENDOR *p_msg, tAVRC_COMMAND *p_
+     case AVRC_PDU_SET_ABSOLUTE_VOLUME: {
+         if (len != 1) {
+             status = AVRC_STS_INTERNAL_ERR;
++        } else {
++            BE_STREAM_TO_UINT8 (p_result->volume.volume, p);
++            p_result->volume.volume &= 0x7F; // remove the top bit
+         }
+         break;
+     }
+diff --git a/components/bt/bluedroid/stack/avrc/avrc_sdp.c b/components/bt/bluedroid/stack/avrc/avrc_sdp.c
+index 4ef993dcc..d3616f323 100644
+--- a/components/bt/bluedroid/stack/avrc/avrc_sdp.c
++++ b/components/bt/bluedroid/stack/avrc/avrc_sdp.c
+@@ -30,7 +30,7 @@
+ #if (defined(AVRC_INCLUDED) && AVRC_INCLUDED == TRUE)
+ 
+ #ifndef SDP_AVRCP_1_4
+-#define SDP_AVRCP_1_4      FALSE
++#define SDP_AVRCP_1_4      TRUE
+ #endif
+ 
+ #ifndef SDP_AVCTP_1_4
+diff --git a/components/bt/bluedroid/stack/avrc/avrc_utils.c b/components/bt/bluedroid/stack/avrc/avrc_utils.c
+index a8ee2af54..addb1b68e 100644
+--- a/components/bt/bluedroid/stack/avrc/avrc_utils.c
++++ b/components/bt/bluedroid/stack/avrc/avrc_utils.c
+@@ -58,6 +58,7 @@ BOOLEAN AVRC_IsValidAvcType(UINT8 pdu_id, UINT8 avc_type)
+         case AVRC_PDU_INFORM_BATTERY_STAT_OF_CT:   /* 0x18 */
+         case AVRC_PDU_REQUEST_CONTINUATION_RSP:    /* 0x40 */
+         case AVRC_PDU_ABORT_CONTINUATION_RSP:      /* 0x41 */
++        case AVRC_PDU_SET_ABSOLUTE_VOLUME:         /* 0x50 */
+             if (avc_type == AVRC_CMD_CTRL) {
+                 result = TRUE;
+             }
+diff --git a/components/bt/bluedroid/stack/include/stack/avrc_api.h b/components/bt/bluedroid/stack/include/stack/avrc_api.h
+index c0c0a5ff3..85e8db1b2 100644
+--- a/components/bt/bluedroid/stack/include/stack/avrc_api.h
++++ b/components/bt/bluedroid/stack/include/stack/avrc_api.h
+@@ -590,8 +590,7 @@ extern tAVRC_STS AVRC_ParsCommand (tAVRC_MSG *p_msg, tAVRC_COMMAND *p_result,
+ **                  Otherwise, the error code defined by AVRCP 1.4
+ **
+ *******************************************************************************/
+-extern tAVRC_STS AVRC_ParsResponse (tAVRC_MSG *p_msg, tAVRC_RESPONSE *p_result,
+-                                    UINT8 *p_buf, UINT16 buf_len);
++extern tAVRC_STS AVRC_ParsResponse (tAVRC_MSG *p_msg, tAVRC_RESPONSE *p_result);
+ 
+ /*******************************************************************************
+ **
+diff --git a/components/bt/bluedroid/stack/include/stack/avrc_defs.h b/components/bt/bluedroid/stack/include/stack/avrc_defs.h
+index 8c56cf532..41d87759c 100644
+--- a/components/bt/bluedroid/stack/include/stack/avrc_defs.h
++++ b/components/bt/bluedroid/stack/include/stack/avrc_defs.h
+@@ -834,7 +834,7 @@ typedef union {
+ #define AVRC_IS_VALID_CAP_ID(a)           (((a == AVRC_CAP_COMPANY_ID) || (a == AVRC_CAP_EVENTS_SUPPORTED)) ? TRUE : FALSE)
+ 
+ #define AVRC_IS_VALID_EVENT_ID(a)           (((a >= AVRC_EVT_PLAY_STATUS_CHANGE) && \
+-                                              (a <= AVRC_EVT_APP_SETTING_CHANGE)) ? TRUE : FALSE)
++                                              (a <= AVRC_EVT_VOLUME_CHANGE)) ? TRUE : FALSE)
+ 
+ #define AVRC_IS_VALID_ATTRIBUTE(a)          (((((a > 0) && a <= AVRC_PLAYER_SETTING_SCAN)) || \
+                           (a >= AVRC_PLAYER_SETTING_LOW_MENU_EXT)) ? TRUE : FALSE)
+diff --git a/examples/bluetooth/a2dp_gatts_coex/main/bt_app_av.c b/examples/bluetooth/a2dp_gatts_coex/main/bt_app_av.c
+index 08a08f644..4cd84e36c 100644
+--- a/examples/bluetooth/a2dp_gatts_coex/main/bt_app_av.c
++++ b/examples/bluetooth/a2dp_gatts_coex/main/bt_app_av.c
+@@ -25,15 +25,31 @@
+ #include "freertos/task.h"
+ #include "driver/i2s.h"
+ 
++#include "sys/lock.h"
++
++// AVRCP used transaction label
++#define APP_RC_CT_TL_GET_CAPS            (0)
++#define APP_RC_CT_TL_GET_META_DATA       (1)
++#define APP_RC_CT_TL_RN_TRACK_CHANGE     (2)
++#define APP_RC_CT_TL_RN_PLAYBACK_CHANGE  (3)
++#define APP_RC_CT_TL_RN_PLAY_POS_CHANGE  (4)
++
+ /* a2dp event handler */
+ static void bt_av_hdl_a2d_evt(uint16_t event, void *p_param);
+-/* avrc event handler */
+-static void bt_av_hdl_avrc_evt(uint16_t event, void *p_param);
++/* avrc CT event handler */
++static void bt_av_hdl_avrc_ct_evt(uint16_t event, void *p_param);
++/* avrc TG event handler */
++static void bt_av_hdl_avrc_tg_evt(uint16_t event, void *p_param);
+ 
+-static uint32_t m_pkt_cnt = 0;
+-static esp_a2d_audio_state_t m_audio_state = ESP_A2D_AUDIO_STATE_STOPPED;
+-static const char *m_a2d_conn_state_str[] = {"Disconnected", "Connecting", "Connected", "Disconnecting"};
+-static const char *m_a2d_audio_state_str[] = {"Suspended", "Stopped", "Started"};
++static uint32_t s_pkt_cnt = 0;
++static esp_a2d_audio_state_t s_audio_state = ESP_A2D_AUDIO_STATE_STOPPED;
++static const char *s_a2d_conn_state_str[] = {"Disconnected", "Connecting", "Connected", "Disconnecting"};
++static const char *s_a2d_audio_state_str[] = {"Suspended", "Stopped", "Started"};
++static esp_avrc_rn_evt_cap_mask_t s_avrc_peer_rn_cap;
++static _lock_t s_volume_lock;
++static xTaskHandle s_vcs_task_hdl = NULL;
++static uint8_t s_volume = 0;
++static bool s_volume_notify;
+ 
+ /* callback for A2DP sink */
+ void bt_app_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t *param)
+@@ -55,8 +71,8 @@ void bt_app_a2d_data_cb(const uint8_t *data, uint32_t len)
+ {
+     size_t bytes_written;
+     i2s_write(0, data, len, &bytes_written, portMAX_DELAY);
+-    if (++m_pkt_cnt % 100 == 0) {
+-        ESP_LOGI(BT_AV_TAG, "Audio packet count %u", m_pkt_cnt);
++    if (++s_pkt_cnt % 100 == 0) {
++        ESP_LOGI(BT_AV_TAG, "Audio packet count %u", s_pkt_cnt);
+     }
+ }
+ 
+@@ -83,12 +99,29 @@ void bt_app_rc_ct_cb(esp_avrc_ct_cb_event_t event, esp_avrc_ct_cb_param_t *param
+     case ESP_AVRC_CT_CONNECTION_STATE_EVT:
+     case ESP_AVRC_CT_PASSTHROUGH_RSP_EVT:
+     case ESP_AVRC_CT_CHANGE_NOTIFY_EVT:
+-    case ESP_AVRC_CT_REMOTE_FEATURES_EVT: {
+-        bt_app_work_dispatch(bt_av_hdl_avrc_evt, event, param, sizeof(esp_avrc_ct_cb_param_t), NULL);
++    case ESP_AVRC_CT_REMOTE_FEATURES_EVT:
++    case ESP_AVRC_CT_GET_RN_CAPABILITIES_RSP_EVT: {
++        bt_app_work_dispatch(bt_av_hdl_avrc_ct_evt, event, param, sizeof(esp_avrc_ct_cb_param_t), NULL);
+         break;
+     }
+     default:
+-        ESP_LOGE(BT_AV_TAG, "Invalid AVRC event: %d", event);
++        ESP_LOGE(BT_RC_CT_TAG, "Invalid AVRC event: %d", event);
++        break;
++    }
++}
++
++void bt_app_rc_tg_cb(esp_avrc_tg_cb_event_t event, esp_avrc_tg_cb_param_t *param)
++{
++    switch (event) {
++    case ESP_AVRC_TG_CONNECTION_STATE_EVT:
++    case ESP_AVRC_TG_REMOTE_FEATURES_EVT:
++    case ESP_AVRC_TG_PASSTHROUGH_CMD_EVT:
++    case ESP_AVRC_TG_SET_ABSOLUTE_VOLUME_CMD_EVT:
++    case ESP_AVRC_TG_REGISTER_NOTIFICATION_EVT:
++        bt_app_work_dispatch(bt_av_hdl_avrc_tg_evt, event, param, sizeof(esp_avrc_tg_cb_param_t), NULL);
++        break;
++    default:
++        ESP_LOGE(BT_RC_TG_TAG, "Invalid AVRC event: %d", event);
+         break;
+     }
+ }
+@@ -102,15 +135,20 @@ static void bt_av_hdl_a2d_evt(uint16_t event, void *p_param)
+         a2d = (esp_a2d_cb_param_t *)(p_param);
+         uint8_t *bda = a2d->conn_stat.remote_bda;
+         ESP_LOGI(BT_AV_TAG, "A2DP connection state: %s, [%02x:%02x:%02x:%02x:%02x:%02x]",
+-             m_a2d_conn_state_str[a2d->conn_stat.state], bda[0], bda[1], bda[2], bda[3], bda[4], bda[5]);
++             s_a2d_conn_state_str[a2d->conn_stat.state], bda[0], bda[1], bda[2], bda[3], bda[4], bda[5]);
++        if (a2d->conn_stat.state == ESP_A2D_CONNECTION_STATE_DISCONNECTED) {
++            esp_bt_gap_set_scan_mode(ESP_BT_SCAN_MODE_CONNECTABLE_DISCOVERABLE);
++        } else if (a2d->conn_stat.state == ESP_A2D_CONNECTION_STATE_CONNECTED){
++            esp_bt_gap_set_scan_mode(ESP_BT_SCAN_MODE_NONE);
++        }
+         break;
+     }
+     case ESP_A2D_AUDIO_STATE_EVT: {
+         a2d = (esp_a2d_cb_param_t *)(p_param);
+-        ESP_LOGI(BT_AV_TAG, "A2DP audio state: %s", m_a2d_audio_state_str[a2d->audio_stat.state]);
+-        m_audio_state = a2d->audio_stat.state;
++        ESP_LOGI(BT_AV_TAG, "A2DP audio state: %s", s_a2d_audio_state_str[a2d->audio_stat.state]);
++        s_audio_state = a2d->audio_stat.state;
+         if (ESP_A2D_AUDIO_STATE_STARTED == a2d->audio_stat.state) {
+-            m_pkt_cnt = 0;
++            s_pkt_cnt = 0;
+         }
+         break;
+     }
+@@ -130,7 +168,7 @@ static void bt_av_hdl_a2d_evt(uint16_t event, void *p_param)
+             }
+             i2s_set_clk(0, sample_rate, 16, 2);
+ 
+-            ESP_LOGI(BT_AV_TAG, "Configure audio player 0x%x-0x%x-0x%x-0x%x",
++            ESP_LOGI(BT_AV_TAG, "Configure audio player %x-%x-%x-%x",
+                      a2d->audio_cfg.mcc.cie.sbc[0],
+                      a2d->audio_cfg.mcc.cie.sbc[1],
+                      a2d->audio_cfg.mcc.cie.sbc[2],
+@@ -145,54 +183,182 @@ static void bt_av_hdl_a2d_evt(uint16_t event, void *p_param)
+     }
+ }
+ 
+-static void bt_av_new_track()
++static void bt_av_new_track(void)
+ {
+-    //Register notifications and request metadata
+-    esp_avrc_ct_send_metadata_cmd(0, ESP_AVRC_MD_ATTR_TITLE | ESP_AVRC_MD_ATTR_ARTIST | ESP_AVRC_MD_ATTR_ALBUM | ESP_AVRC_MD_ATTR_GENRE);
+-    esp_avrc_ct_send_register_notification_cmd(1, ESP_AVRC_RN_TRACK_CHANGE, 0);
++    // request metadata
++    uint8_t attr_mask = ESP_AVRC_MD_ATTR_TITLE | ESP_AVRC_MD_ATTR_ARTIST | ESP_AVRC_MD_ATTR_ALBUM | ESP_AVRC_MD_ATTR_GENRE;
++    esp_avrc_ct_send_metadata_cmd(APP_RC_CT_TL_GET_META_DATA, attr_mask);
++
++    // register notification if peer support the event_id
++    if (esp_avrc_rn_evt_bit_mask_operation(ESP_AVRC_BIT_MASK_OP_TEST, &s_avrc_peer_rn_cap,
++                                           ESP_AVRC_RN_TRACK_CHANGE)) {
++        esp_avrc_ct_send_register_notification_cmd(APP_RC_CT_TL_RN_TRACK_CHANGE, ESP_AVRC_RN_TRACK_CHANGE, 0);
++    }
+ }
+ 
+-void bt_av_notify_evt_handler(uint8_t event_id, uint32_t event_parameter)
++static void bt_av_playback_changed(void)
++{
++    if (esp_avrc_rn_evt_bit_mask_operation(ESP_AVRC_BIT_MASK_OP_TEST, &s_avrc_peer_rn_cap,
++                                           ESP_AVRC_RN_PLAY_STATUS_CHANGE)) {
++        esp_avrc_ct_send_register_notification_cmd(APP_RC_CT_TL_RN_PLAYBACK_CHANGE, ESP_AVRC_RN_PLAY_STATUS_CHANGE, 0);
++    }
++}
++
++static void bt_av_play_pos_changed(void)
++{
++    if (esp_avrc_rn_evt_bit_mask_operation(ESP_AVRC_BIT_MASK_OP_TEST, &s_avrc_peer_rn_cap,
++                                           ESP_AVRC_RN_PLAY_POS_CHANGED)) {
++        esp_avrc_ct_send_register_notification_cmd(APP_RC_CT_TL_RN_PLAY_POS_CHANGE, ESP_AVRC_RN_PLAY_POS_CHANGED, 10);
++    }
++}
++
++void bt_av_notify_evt_handler(uint8_t event_id, esp_avrc_rn_param_t *event_parameter)
+ {
+     switch (event_id) {
+     case ESP_AVRC_RN_TRACK_CHANGE:
+         bt_av_new_track();
+         break;
++    case ESP_AVRC_RN_PLAY_STATUS_CHANGE:
++        ESP_LOGI(BT_AV_TAG, "Playback status changed: 0x%x", event_parameter->playback);
++        bt_av_playback_changed();
++        break;
++    case ESP_AVRC_RN_PLAY_POS_CHANGED:
++        ESP_LOGI(BT_AV_TAG, "Play position changed: %d-ms", event_parameter->play_pos);
++        bt_av_play_pos_changed();
++        break;
+     }
+ }
+ 
+-static void bt_av_hdl_avrc_evt(uint16_t event, void *p_param)
++static void bt_av_hdl_avrc_ct_evt(uint16_t event, void *p_param)
+ {
+-    ESP_LOGD(BT_AV_TAG, "%s evt %d", __func__, event);
++    ESP_LOGD(BT_RC_CT_TAG, "%s evt %d", __func__, event);
+     esp_avrc_ct_cb_param_t *rc = (esp_avrc_ct_cb_param_t *)(p_param);
+     switch (event) {
+     case ESP_AVRC_CT_CONNECTION_STATE_EVT: {
+         uint8_t *bda = rc->conn_stat.remote_bda;
+-        ESP_LOGI(BT_AV_TAG, "AVRC conn_state evt: state %d, [%02x:%02x:%02x:%02x:%02x:%02x]",
++        ESP_LOGI(BT_RC_CT_TAG, "AVRC conn_state evt: state %d, [%02x:%02x:%02x:%02x:%02x:%02x]",
+                  rc->conn_stat.connected, bda[0], bda[1], bda[2], bda[3], bda[4], bda[5]);
++
++        if (rc->conn_stat.connected) {
++            // get remote supported event_ids of peer AVRCP Target
++            esp_avrc_ct_send_get_rn_capabilities_cmd(APP_RC_CT_TL_GET_CAPS);
++        } else {
++            // clear peer notification capability record
++            s_avrc_peer_rn_cap.bits = 0;
++        }
+         break;
+     }
+     case ESP_AVRC_CT_PASSTHROUGH_RSP_EVT: {
+-        ESP_LOGI(BT_AV_TAG, "AVRC passthrough rsp: key_code 0x%x, key_state %d", rc->psth_rsp.key_code, rc->psth_rsp.key_state);
++        ESP_LOGI(BT_RC_CT_TAG, "AVRC passthrough rsp: key_code 0x%x, key_state %d", rc->psth_rsp.key_code, rc->psth_rsp.key_state);
+         break;
+     }
+     case ESP_AVRC_CT_METADATA_RSP_EVT: {
+-        ESP_LOGI(BT_AV_TAG, "AVRC metadata rsp: attribute id 0x%x, %s", rc->meta_rsp.attr_id, rc->meta_rsp.attr_text);
++        ESP_LOGI(BT_RC_CT_TAG, "AVRC metadata rsp: attribute id 0x%x, %s", rc->meta_rsp.attr_id, rc->meta_rsp.attr_text);
+         free(rc->meta_rsp.attr_text);
+         break;
+     }
+     case ESP_AVRC_CT_CHANGE_NOTIFY_EVT: {
+-        ESP_LOGI(BT_AV_TAG, "AVRC event notification: %d, param: %d", rc->change_ntf.event_id, rc->change_ntf.event_parameter);
+-        bt_av_notify_evt_handler(rc->change_ntf.event_id, rc->change_ntf.event_parameter);
++        ESP_LOGI(BT_RC_CT_TAG, "AVRC event notification: %d", rc->change_ntf.event_id);
++        bt_av_notify_evt_handler(rc->change_ntf.event_id, &rc->change_ntf.event_parameter);
+         break;
+     }
+     case ESP_AVRC_CT_REMOTE_FEATURES_EVT: {
+-        ESP_LOGI(BT_AV_TAG, "AVRC remote features 0x%x", rc->rmt_feats.feat_mask);
++        ESP_LOGI(BT_RC_CT_TAG, "AVRC remote features %x, TG features %x", rc->rmt_feats.feat_mask, rc->rmt_feats.tg_feat_flag);
++        break;
++    }
++    case ESP_AVRC_CT_GET_RN_CAPABILITIES_RSP_EVT: {
++        ESP_LOGI(BT_RC_CT_TAG, "remote rn_cap: count %d, bitmask 0x%x", rc->get_rn_caps_rsp.cap_count,
++                 rc->get_rn_caps_rsp.evt_set.bits);
++        s_avrc_peer_rn_cap.bits = rc->get_rn_caps_rsp.evt_set.bits;
+         bt_av_new_track();
++        bt_av_playback_changed();
++        bt_av_play_pos_changed();
+         break;
+     }
+     default:
+-        ESP_LOGE(BT_AV_TAG, "%s unhandled evt %d", __func__, event);
++        ESP_LOGE(BT_RC_CT_TAG, "%s unhandled evt %d", __func__, event);
++        break;
++    }
++}
++
++static void volume_set_by_controller(uint8_t volume)
++{
++    ESP_LOGI(BT_RC_TG_TAG, "Volume is set by remote controller %d%%\n", (uint32_t)volume * 100 / 0x7f);
++    _lock_acquire(&s_volume_lock);
++    s_volume = volume;
++    _lock_release(&s_volume_lock);
++}
++
++static void volume_set_by_local_host(uint8_t volume)
++{
++    ESP_LOGI(BT_RC_TG_TAG, "Volume is set locally to: %d%%", (uint32_t)volume * 100 / 0x7f);
++    _lock_acquire(&s_volume_lock);
++    s_volume = volume;
++    _lock_release(&s_volume_lock);
++
++    if (s_volume_notify) {
++        esp_avrc_rn_param_t rn_param;
++        rn_param.volume = s_volume;
++        esp_avrc_tg_send_rn_rsp(ESP_AVRC_RN_VOLUME_CHANGE, ESP_AVRC_RN_RSP_CHANGED, &rn_param);
++        s_volume_notify = false;
++    }
++}
++
++static void volume_change_simulation(void *arg)
++{
++    ESP_LOGI(BT_RC_TG_TAG, "start volume change simulation");
++
++    for (;;) {
++        vTaskDelay(10000 / portTICK_RATE_MS);
++
++        uint8_t volume = (s_volume + 5) & 0x7f;
++        volume_set_by_local_host(volume);
++    }
++}
++
++static void bt_av_hdl_avrc_tg_evt(uint16_t event, void *p_param)
++{
++    ESP_LOGD(BT_RC_TG_TAG, "%s evt %d", __func__, event);
++    esp_avrc_tg_cb_param_t *rc = (esp_avrc_tg_cb_param_t *)(p_param);
++    switch (event) {
++    case ESP_AVRC_TG_CONNECTION_STATE_EVT: {
++        uint8_t *bda = rc->conn_stat.remote_bda;
++        ESP_LOGI(BT_RC_TG_TAG, "AVRC conn_state evt: state %d, [%02x:%02x:%02x:%02x:%02x:%02x]",
++                 rc->conn_stat.connected, bda[0], bda[1], bda[2], bda[3], bda[4], bda[5]);
++        if (rc->conn_stat.connected) {
++            // create task to simulate volume change
++            xTaskCreate(volume_change_simulation, "vcsT", 2048, NULL, 5, &s_vcs_task_hdl);
++        } else {
++            vTaskDelete(s_vcs_task_hdl);
++            ESP_LOGI(BT_RC_TG_TAG, "Stop volume change simulation");
++        }
++        break;
++    }
++    case ESP_AVRC_TG_PASSTHROUGH_CMD_EVT: {
++        ESP_LOGI(BT_RC_TG_TAG, "AVRC passthrough cmd: key_code 0x%x, key_state %d", rc->psth_cmd.key_code, rc->psth_cmd.key_state);
++        break;
++    }
++    case ESP_AVRC_TG_SET_ABSOLUTE_VOLUME_CMD_EVT: {
++        ESP_LOGI(BT_RC_TG_TAG, "AVRC set absolute volume: %d%%", (int)rc->set_abs_vol.volume * 100/ 0x7f);
++        volume_set_by_controller(rc->set_abs_vol.volume);
++        break;
++    }
++    case ESP_AVRC_TG_REGISTER_NOTIFICATION_EVT: {
++        ESP_LOGI(BT_RC_TG_TAG, "AVRC register event notification: %d, param: 0x%x", rc->reg_ntf.event_id, rc->reg_ntf.event_parameter);
++        if (rc->reg_ntf.event_id == ESP_AVRC_RN_VOLUME_CHANGE) {
++            s_volume_notify = true;
++            esp_avrc_rn_param_t rn_param;
++            rn_param.volume = s_volume;
++            esp_avrc_tg_send_rn_rsp(ESP_AVRC_RN_VOLUME_CHANGE, ESP_AVRC_RN_RSP_INTERIM, &rn_param);
++        }
++        break;
++    }
++    case ESP_AVRC_TG_REMOTE_FEATURES_EVT: {
++        ESP_LOGI(BT_RC_TG_TAG, "AVRC remote features %x, CT features %x", rc->rmt_feats.feat_mask, rc->rmt_feats.ct_feat_flag);
++        break;
++    }
++    default:
++        ESP_LOGE(BT_RC_TG_TAG, "%s unhandled evt %d", __func__, event);
+         break;
+     }
+ }
+diff --git a/examples/bluetooth/a2dp_gatts_coex/main/bt_app_av.h b/examples/bluetooth/a2dp_gatts_coex/main/bt_app_av.h
+index 6648eb95e..46342daad 100644
+--- a/examples/bluetooth/a2dp_gatts_coex/main/bt_app_av.h
++++ b/examples/bluetooth/a2dp_gatts_coex/main/bt_app_av.h
+@@ -14,6 +14,8 @@
+ #include "esp_avrc_api.h"
+ 
+ #define BT_AV_TAG               "BT_AV"
++#define BT_RC_TG_TAG            "RCTG"
++#define BT_RC_CT_TAG            "RCCT"
+ 
+ /**
+  * @brief     callback function for A2DP sink
+@@ -30,4 +32,9 @@ void bt_app_a2d_data_cb(const uint8_t *data, uint32_t len);
+  */
+ void bt_app_rc_ct_cb(esp_avrc_ct_cb_event_t event, esp_avrc_ct_cb_param_t *param);
+ 
++/**
++ * @brief     callback function for AVRCP target
++ */
++void bt_app_rc_tg_cb(esp_avrc_tg_cb_event_t event, esp_avrc_tg_cb_param_t *param);
++
+ #endif /* __BT_APP_AV_H__*/
+diff --git a/examples/bluetooth/a2dp_gatts_coex/main/bt_app_core.c b/examples/bluetooth/a2dp_gatts_coex/main/bt_app_core.c
+index 644c5c11f..cd9aa99d5 100644
+--- a/examples/bluetooth/a2dp_gatts_coex/main/bt_app_core.c
++++ b/examples/bluetooth/a2dp_gatts_coex/main/bt_app_core.c
+@@ -21,14 +21,15 @@ static void bt_app_task_handler(void *arg);
+ static bool bt_app_send_msg(bt_app_msg_t *msg);
+ static void bt_app_work_dispatched(bt_app_msg_t *msg);
+ 
+-static xQueueHandle bt_app_task_queue = NULL;
+-static xTaskHandle bt_app_task_handle = NULL;
++static xQueueHandle s_bt_app_task_queue = NULL;
++static xTaskHandle s_bt_app_task_handle = NULL;
+ 
+ bool bt_app_work_dispatch(bt_app_cb_t p_cback, uint16_t event, void *p_params, int param_len, bt_app_copy_cb_t p_copy_cback)
+ {
+     ESP_LOGD(BT_APP_CORE_TAG, "%s event 0x%x, param len %d", __func__, event, param_len);
+ 
+-    bt_app_msg_t msg = { };
++    bt_app_msg_t msg;
++    memset(&msg, 0, sizeof(bt_app_msg_t));
+ 
+     msg.sig = BT_APP_SIG_WORK_DISPATCH;
+     msg.event = event;
+@@ -56,7 +57,7 @@ static bool bt_app_send_msg(bt_app_msg_t *msg)
+         return false;
+     }
+ 
+-    if (xQueueSend(bt_app_task_queue, msg, 10 / portTICK_RATE_MS) != pdTRUE) {
++    if (xQueueSend(s_bt_app_task_queue, msg, 10 / portTICK_RATE_MS) != pdTRUE) {
+         ESP_LOGE(BT_APP_CORE_TAG, "%s xQueue send failed", __func__);
+         return false;
+     }
+@@ -74,14 +75,14 @@ static void bt_app_task_handler(void *arg)
+ {
+     bt_app_msg_t msg;
+     for (;;) {
+-        if (pdTRUE == xQueueReceive(bt_app_task_queue, &msg, (portTickType)portMAX_DELAY)) {
++        if (pdTRUE == xQueueReceive(s_bt_app_task_queue, &msg, (portTickType)portMAX_DELAY)) {
+             ESP_LOGD(BT_APP_CORE_TAG, "%s, sig 0x%x, 0x%x", __func__, msg.sig, msg.event);
+             switch (msg.sig) {
+             case BT_APP_SIG_WORK_DISPATCH:
+                 bt_app_work_dispatched(&msg);
+                 break;
+             default:
+-                ESP_LOGW(BT_APP_CORE_TAG, "%s, unhandled sig: 0x%x", __func__, msg.sig);
++                ESP_LOGW(BT_APP_CORE_TAG, "%s, unhandled sig: %d", __func__, msg.sig);
+                 break;
+             } // switch (msg.sig)
+ 
+@@ -94,19 +95,19 @@ static void bt_app_task_handler(void *arg)
+ 
+ void bt_app_task_start_up(void)
+ {
+-    bt_app_task_queue = xQueueCreate(10, sizeof(bt_app_msg_t));
+-    xTaskCreate(bt_app_task_handler, "BtAppT", 2048, NULL, configMAX_PRIORITIES - 3, bt_app_task_handle);
++    s_bt_app_task_queue = xQueueCreate(10, sizeof(bt_app_msg_t));
++    xTaskCreate(bt_app_task_handler, "BtAppT", 3072, NULL, configMAX_PRIORITIES - 3, &s_bt_app_task_handle);
+     return;
+ }
+ 
+ void bt_app_task_shut_down(void)
+ {
+-    if (bt_app_task_handle) {
+-        vTaskDelete(bt_app_task_handle);
+-        bt_app_task_handle = NULL;
++    if (s_bt_app_task_handle) {
++        vTaskDelete(s_bt_app_task_handle);
++        s_bt_app_task_handle = NULL;
+     }
+-    if (bt_app_task_queue) {
+-        vQueueDelete(bt_app_task_queue);
+-        bt_app_task_queue = NULL;
++    if (s_bt_app_task_queue) {
++        vQueueDelete(s_bt_app_task_queue);
++        s_bt_app_task_queue = NULL;
+     }
+ }
+diff --git a/examples/bluetooth/a2dp_gatts_coex/main/main.c b/examples/bluetooth/a2dp_gatts_coex/main/main.c
+index 367602705..2382cad49 100644
+--- a/examples/bluetooth/a2dp_gatts_coex/main/main.c
++++ b/examples/bluetooth/a2dp_gatts_coex/main/main.c
+@@ -602,6 +602,39 @@ static void ble_gatts_init(void)
+         ESP_LOGE(BT_BLE_COEX_TAG, "set local  MTU failed, error code = 0x%x", local_mtu_ret);
+     }
+ }
++
++void bt_app_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param)
++{
++    switch (event) {
++    case ESP_BT_GAP_AUTH_CMPL_EVT: {
++        if (param->auth_cmpl.stat == ESP_BT_STATUS_SUCCESS) {
++            ESP_LOGI(BT_BLE_COEX_TAG, "authentication success: %s", param->auth_cmpl.device_name);
++            esp_log_buffer_hex(BT_BLE_COEX_TAG, param->auth_cmpl.bda, ESP_BD_ADDR_LEN);
++        } else {
++            ESP_LOGE(BT_BLE_COEX_TAG, "authentication failed, status:%d", param->auth_cmpl.stat);
++        }
++        break;
++    }
++#if (CONFIG_BT_SSP_ENABLED == true)
++    case ESP_BT_GAP_CFM_REQ_EVT:
++        ESP_LOGI(BT_BLE_COEX_TAG, "ESP_BT_GAP_CFM_REQ_EVT Please compare the numeric value: %d", param->cfm_req.num_val);
++        esp_bt_gap_ssp_confirm_reply(param->cfm_req.bda, true);
++        break;
++    case ESP_BT_GAP_KEY_NOTIF_EVT:
++        ESP_LOGI(BT_BLE_COEX_TAG, "ESP_BT_GAP_KEY_NOTIF_EVT passkey:%d", param->key_notif.passkey);
++        break;
++    case ESP_BT_GAP_KEY_REQ_EVT:
++        ESP_LOGI(BT_BLE_COEX_TAG, "ESP_BT_GAP_KEY_REQ_EVT Please enter passkey!");
++        break;
++#endif
++    default: {
++        ESP_LOGI(BT_BLE_COEX_TAG, "event: %d", event);
++        break;
++    }
++    }
++    return;
++}
++
+ /* handler for bluetooth stack enabled events */
+ static void bt_av_hdl_stack_evt(uint16_t event, void *p_param)
+ {
+@@ -611,14 +644,23 @@ static void bt_av_hdl_stack_evt(uint16_t event, void *p_param)
+         /* set up bt device name */
+         esp_bt_dev_set_device_name(BT_DEVICE_NAME);
+ 
+-        /* initialize A2DP sink */
+-        esp_a2d_register_callback(&bt_app_a2d_cb);
+-        esp_a2d_sink_register_data_callback(bt_app_a2d_data_cb);
+-        esp_a2d_sink_init();
++        esp_bt_gap_register_callback(bt_app_gap_cb);
+ 
+         /* initialize AVRCP controller */
+         esp_avrc_ct_init();
+         esp_avrc_ct_register_callback(bt_app_rc_ct_cb);
++        /* initialize AVRCP target */
++        assert (esp_avrc_tg_init() == ESP_OK);
++        esp_avrc_tg_register_callback(bt_app_rc_tg_cb);
++
++        esp_avrc_rn_evt_cap_mask_t evt_set = {0};
++        esp_avrc_rn_evt_bit_mask_operation(ESP_AVRC_BIT_MASK_OP_SET, &evt_set, ESP_AVRC_RN_VOLUME_CHANGE);
++        assert(esp_avrc_tg_set_rn_evt_cap(&evt_set) == ESP_OK);
++
++        /* initialize A2DP sink */
++        esp_a2d_register_callback(&bt_app_a2d_cb);
++        esp_a2d_sink_register_data_callback(bt_app_a2d_data_cb);
++        esp_a2d_sink_init();
+ 
+         /* set discoverable and connectable mode, wait to be connected */
+         esp_bt_gap_set_scan_mode(ESP_BT_SCAN_MODE_CONNECTABLE_DISCOVERABLE);
+@@ -632,26 +674,24 @@ static void bt_av_hdl_stack_evt(uint16_t event, void *p_param)
+ 
+ void app_main()
+ {
+-    esp_err_t ret;
+-
+-    // Initialize NVS.
+-    ret = nvs_flash_init();
+-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
++    /* Initialize NVS — it is used to store PHY calibration data */
++    esp_err_t err = nvs_flash_init();
++    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+         ESP_ERROR_CHECK(nvs_flash_erase());
+-        ret = nvs_flash_init();
++        err = nvs_flash_init();
+     }
+-    ESP_ERROR_CHECK( ret );
++    ESP_ERROR_CHECK(err);
+ 
+     i2s_config_t i2s_config = {
+ #ifdef CONFIG_A2DP_SINK_OUTPUT_INTERNAL_DAC
+-        .mode = I2S_MODE_DAC_BUILT_IN,
++        .mode = I2S_MODE_MASTER | I2S_MODE_TX | I2S_MODE_DAC_BUILT_IN,
+ #else
+         .mode = I2S_MODE_MASTER | I2S_MODE_TX,                                  // Only TX
+ #endif
+         .sample_rate = 44100,
+         .bits_per_sample = 16,
+         .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,                           //2-channels
+-        .communication_format = I2S_COMM_FORMAT_I2S | I2S_COMM_FORMAT_I2S_MSB,
++        .communication_format = I2S_COMM_FORMAT_I2S_MSB,
+         .dma_buf_count = 6,
+         .dma_buf_len = 60,
+         .intr_alloc_flags = 0,                                                  //Default interrupt priority
+@@ -661,6 +701,7 @@ void app_main()
+ 
+     i2s_driver_install(0, &i2s_config, 0, NULL);
+ #ifdef CONFIG_A2DP_SINK_OUTPUT_INTERNAL_DAC
++    i2s_set_dac_mode(I2S_DAC_CHANNEL_BOTH_EN);
+     i2s_set_pin(0, NULL);
+ #else
+     i2s_pin_config_t pin_config = {
+@@ -674,34 +715,51 @@ void app_main()
+ #endif
+ 
+     esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
+-    ret = esp_bt_controller_init(&bt_cfg);
+-    if (ret) {
+-        ESP_LOGE(BT_BLE_COEX_TAG, "%s initialize controller failed\n", __func__);
++    if ((err = esp_bt_controller_init(&bt_cfg)) != ESP_OK) {
++        ESP_LOGE(BT_BLE_COEX_TAG, "%s initialize controller failed: %s\n", __func__, esp_err_to_name(err));
+         return;
+     }
+ 
+-    ret = esp_bt_controller_enable(ESP_BT_MODE_BTDM);
+-    if (ret) {
+-        ESP_LOGE(BT_BLE_COEX_TAG, "%s enable controller failed\n", __func__);
++    if ((err = esp_bt_controller_enable(ESP_BT_MODE_BTDM)) != ESP_OK) {
++        ESP_LOGE(BT_BLE_COEX_TAG, "%s enable controller failed: %s\n", __func__, esp_err_to_name(err));
+         return;
+     }
+ 
+-    ret = esp_bluedroid_init();
+-    if (ret) {
+-        ESP_LOGE(BT_BLE_COEX_TAG, "%s init bluetooth failed\n", __func__);
++    if ((err = esp_bluedroid_init()) != ESP_OK) {
++        ESP_LOGE(BT_BLE_COEX_TAG, "%s initialize bluedroid failed: %s\n", __func__, esp_err_to_name(err));
+         return;
+     }
+-    ret = esp_bluedroid_enable();
+-    if (ret) {
+-        ESP_LOGE(BT_BLE_COEX_TAG, "%s enable bluetooth failed\n", __func__);
++
++    if ((err = esp_bluedroid_enable()) != ESP_OK) {
++        ESP_LOGE(BT_BLE_COEX_TAG, "%s enable bluedroid failed: %s\n", __func__, esp_err_to_name(err));
+         return;
+     }
+-    
++
+     /* create application task */
+     bt_app_task_start_up();
+ 
+     /* Bluetooth device name, connection mode and profile set up */
+     bt_app_work_dispatch(bt_av_hdl_stack_evt, BT_APP_EVT_STACK_UP, NULL, 0, NULL);
++
++#if (CONFIG_BT_SSP_ENABLED == true)
++    /* Set default parameters for Secure Simple Pairing */
++    esp_bt_sp_param_t param_type = ESP_BT_SP_IOCAP_MODE;
++    esp_bt_io_cap_t iocap = ESP_BT_IO_CAP_IO;
++    esp_bt_gap_set_security_param(param_type, &iocap, sizeof(uint8_t));
++#endif
++
++    /*
++     * Set default parameters for Legacy Pairing
++     * Use fixed pin code
++     */
++    esp_bt_pin_type_t pin_type = ESP_BT_PIN_TYPE_FIXED;
++    esp_bt_pin_code_t pin_code;
++    pin_code[0] = '1';
++    pin_code[1] = '2';
++    pin_code[2] = '3';
++    pin_code[3] = '4';
++    esp_bt_gap_set_pin(pin_type, 4, pin_code);
++
+     //gatt server init
+     ble_gatts_init();
+ }
+diff --git a/examples/bluetooth/a2dp_sink/main/bt_app_av.c b/examples/bluetooth/a2dp_sink/main/bt_app_av.c
+index 5c12fae46..648e6a37d 100644
+--- a/examples/bluetooth/a2dp_sink/main/bt_app_av.c
++++ b/examples/bluetooth/a2dp_sink/main/bt_app_av.c
+@@ -25,15 +25,31 @@
+ #include "freertos/task.h"
+ #include "driver/i2s.h"
+ 
++#include "sys/lock.h"
++
++// AVRCP used transaction label
++#define APP_RC_CT_TL_GET_CAPS            (0)
++#define APP_RC_CT_TL_GET_META_DATA       (1)
++#define APP_RC_CT_TL_RN_TRACK_CHANGE     (2)
++#define APP_RC_CT_TL_RN_PLAYBACK_CHANGE  (3)
++#define APP_RC_CT_TL_RN_PLAY_POS_CHANGE  (4)
++
+ /* a2dp event handler */
+ static void bt_av_hdl_a2d_evt(uint16_t event, void *p_param);
+-/* avrc event handler */
+-static void bt_av_hdl_avrc_evt(uint16_t event, void *p_param);
++/* avrc CT event handler */
++static void bt_av_hdl_avrc_ct_evt(uint16_t event, void *p_param);
++/* avrc TG event handler */
++static void bt_av_hdl_avrc_tg_evt(uint16_t event, void *p_param);
+ 
+ static uint32_t s_pkt_cnt = 0;
+ static esp_a2d_audio_state_t s_audio_state = ESP_A2D_AUDIO_STATE_STOPPED;
+ static const char *s_a2d_conn_state_str[] = {"Disconnected", "Connecting", "Connected", "Disconnecting"};
+ static const char *s_a2d_audio_state_str[] = {"Suspended", "Stopped", "Started"};
++static esp_avrc_rn_evt_cap_mask_t s_avrc_peer_rn_cap;
++static _lock_t s_volume_lock;
++static xTaskHandle s_vcs_task_hdl = NULL;
++static uint8_t s_volume = 0;
++static bool s_volume_notify;
+ 
+ /* callback for A2DP sink */
+ void bt_app_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t *param)
+@@ -79,12 +95,29 @@ void bt_app_rc_ct_cb(esp_avrc_ct_cb_event_t event, esp_avrc_ct_cb_param_t *param
+     case ESP_AVRC_CT_CONNECTION_STATE_EVT:
+     case ESP_AVRC_CT_PASSTHROUGH_RSP_EVT:
+     case ESP_AVRC_CT_CHANGE_NOTIFY_EVT:
+-    case ESP_AVRC_CT_REMOTE_FEATURES_EVT: {
+-        bt_app_work_dispatch(bt_av_hdl_avrc_evt, event, param, sizeof(esp_avrc_ct_cb_param_t), NULL);
++    case ESP_AVRC_CT_REMOTE_FEATURES_EVT:
++    case ESP_AVRC_CT_GET_RN_CAPABILITIES_RSP_EVT: {
++        bt_app_work_dispatch(bt_av_hdl_avrc_ct_evt, event, param, sizeof(esp_avrc_ct_cb_param_t), NULL);
++        break;
++    }
++    default:
++        ESP_LOGE(BT_RC_CT_TAG, "Invalid AVRC event: %d", event);
+         break;
+     }
++}
++
++void bt_app_rc_tg_cb(esp_avrc_tg_cb_event_t event, esp_avrc_tg_cb_param_t *param)
++{
++    switch (event) {
++    case ESP_AVRC_TG_CONNECTION_STATE_EVT:
++    case ESP_AVRC_TG_REMOTE_FEATURES_EVT:
++    case ESP_AVRC_TG_PASSTHROUGH_CMD_EVT:
++    case ESP_AVRC_TG_SET_ABSOLUTE_VOLUME_CMD_EVT:
++    case ESP_AVRC_TG_REGISTER_NOTIFICATION_EVT:
++        bt_app_work_dispatch(bt_av_hdl_avrc_tg_evt, event, param, sizeof(esp_avrc_tg_cb_param_t), NULL);
++        break;
+     default:
+-        ESP_LOGE(BT_AV_TAG, "Invalid AVRC event: %d", event);
++        ESP_LOGE(BT_RC_TG_TAG, "Invalid AVRC event: %d", event);
+         break;
+     }
+ }
+@@ -146,54 +179,182 @@ static void bt_av_hdl_a2d_evt(uint16_t event, void *p_param)
+     }
+ }
+ 
+-static void bt_av_new_track()
++static void bt_av_new_track(void)
++{
++    // request metadata
++    uint8_t attr_mask = ESP_AVRC_MD_ATTR_TITLE | ESP_AVRC_MD_ATTR_ARTIST | ESP_AVRC_MD_ATTR_ALBUM | ESP_AVRC_MD_ATTR_GENRE;
++    esp_avrc_ct_send_metadata_cmd(APP_RC_CT_TL_GET_META_DATA, attr_mask);
++
++    // register notification if peer support the event_id
++    if (esp_avrc_rn_evt_bit_mask_operation(ESP_AVRC_BIT_MASK_OP_TEST, &s_avrc_peer_rn_cap,
++                                           ESP_AVRC_RN_TRACK_CHANGE)) {
++        esp_avrc_ct_send_register_notification_cmd(APP_RC_CT_TL_RN_TRACK_CHANGE, ESP_AVRC_RN_TRACK_CHANGE, 0);
++    }
++}
++
++static void bt_av_playback_changed(void)
+ {
+-    //Register notifications and request metadata
+-    esp_avrc_ct_send_metadata_cmd(0, ESP_AVRC_MD_ATTR_TITLE | ESP_AVRC_MD_ATTR_ARTIST | ESP_AVRC_MD_ATTR_ALBUM | ESP_AVRC_MD_ATTR_GENRE);
+-    esp_avrc_ct_send_register_notification_cmd(1, ESP_AVRC_RN_TRACK_CHANGE, 0);
++    if (esp_avrc_rn_evt_bit_mask_operation(ESP_AVRC_BIT_MASK_OP_TEST, &s_avrc_peer_rn_cap,
++                                           ESP_AVRC_RN_PLAY_STATUS_CHANGE)) {
++        esp_avrc_ct_send_register_notification_cmd(APP_RC_CT_TL_RN_PLAYBACK_CHANGE, ESP_AVRC_RN_PLAY_STATUS_CHANGE, 0);
++    }
++}
++
++static void bt_av_play_pos_changed(void)
++{
++    if (esp_avrc_rn_evt_bit_mask_operation(ESP_AVRC_BIT_MASK_OP_TEST, &s_avrc_peer_rn_cap,
++                                           ESP_AVRC_RN_PLAY_POS_CHANGED)) {
++        esp_avrc_ct_send_register_notification_cmd(APP_RC_CT_TL_RN_PLAY_POS_CHANGE, ESP_AVRC_RN_PLAY_POS_CHANGED, 10);
++    }
+ }
+ 
+-void bt_av_notify_evt_handler(uint8_t event_id, uint32_t event_parameter)
++void bt_av_notify_evt_handler(uint8_t event_id, esp_avrc_rn_param_t *event_parameter)
+ {
+     switch (event_id) {
+     case ESP_AVRC_RN_TRACK_CHANGE:
+         bt_av_new_track();
+         break;
++    case ESP_AVRC_RN_PLAY_STATUS_CHANGE:
++        ESP_LOGI(BT_AV_TAG, "Playback status changed: 0x%x", event_parameter->playback);
++        bt_av_playback_changed();
++        break;
++    case ESP_AVRC_RN_PLAY_POS_CHANGED:
++        ESP_LOGI(BT_AV_TAG, "Play position changed: %d-ms", event_parameter->play_pos);
++        bt_av_play_pos_changed();
++        break;
+     }
+ }
+ 
+-static void bt_av_hdl_avrc_evt(uint16_t event, void *p_param)
++static void bt_av_hdl_avrc_ct_evt(uint16_t event, void *p_param)
+ {
+-    ESP_LOGD(BT_AV_TAG, "%s evt %d", __func__, event);
++    ESP_LOGD(BT_RC_CT_TAG, "%s evt %d", __func__, event);
+     esp_avrc_ct_cb_param_t *rc = (esp_avrc_ct_cb_param_t *)(p_param);
+     switch (event) {
+     case ESP_AVRC_CT_CONNECTION_STATE_EVT: {
+         uint8_t *bda = rc->conn_stat.remote_bda;
+-        ESP_LOGI(BT_AV_TAG, "AVRC conn_state evt: state %d, [%02x:%02x:%02x:%02x:%02x:%02x]",
++        ESP_LOGI(BT_RC_CT_TAG, "AVRC conn_state evt: state %d, [%02x:%02x:%02x:%02x:%02x:%02x]",
+                  rc->conn_stat.connected, bda[0], bda[1], bda[2], bda[3], bda[4], bda[5]);
++
++        if (rc->conn_stat.connected) {
++            // get remote supported event_ids of peer AVRCP Target
++            esp_avrc_ct_send_get_rn_capabilities_cmd(APP_RC_CT_TL_GET_CAPS);
++        } else {
++            // clear peer notification capability record
++            s_avrc_peer_rn_cap.bits = 0;
++        }
+         break;
+     }
+     case ESP_AVRC_CT_PASSTHROUGH_RSP_EVT: {
+-        ESP_LOGI(BT_AV_TAG, "AVRC passthrough rsp: key_code 0x%x, key_state %d", rc->psth_rsp.key_code, rc->psth_rsp.key_state);
++        ESP_LOGI(BT_RC_CT_TAG, "AVRC passthrough rsp: key_code 0x%x, key_state %d", rc->psth_rsp.key_code, rc->psth_rsp.key_state);
+         break;
+     }
+     case ESP_AVRC_CT_METADATA_RSP_EVT: {
+-        ESP_LOGI(BT_AV_TAG, "AVRC metadata rsp: attribute id 0x%x, %s", rc->meta_rsp.attr_id, rc->meta_rsp.attr_text);
++        ESP_LOGI(BT_RC_CT_TAG, "AVRC metadata rsp: attribute id 0x%x, %s", rc->meta_rsp.attr_id, rc->meta_rsp.attr_text);
+         free(rc->meta_rsp.attr_text);
+         break;
+     }
+     case ESP_AVRC_CT_CHANGE_NOTIFY_EVT: {
+-        ESP_LOGI(BT_AV_TAG, "AVRC event notification: %d, param: %d", rc->change_ntf.event_id, rc->change_ntf.event_parameter);
+-        bt_av_notify_evt_handler(rc->change_ntf.event_id, rc->change_ntf.event_parameter);
++        ESP_LOGI(BT_RC_CT_TAG, "AVRC event notification: %d", rc->change_ntf.event_id);
++        bt_av_notify_evt_handler(rc->change_ntf.event_id, &rc->change_ntf.event_parameter);
+         break;
+     }
+     case ESP_AVRC_CT_REMOTE_FEATURES_EVT: {
+-        ESP_LOGI(BT_AV_TAG, "AVRC remote features %x", rc->rmt_feats.feat_mask);
++        ESP_LOGI(BT_RC_CT_TAG, "AVRC remote features %x, TG features %x", rc->rmt_feats.feat_mask, rc->rmt_feats.tg_feat_flag);
++        break;
++    }
++    case ESP_AVRC_CT_GET_RN_CAPABILITIES_RSP_EVT: {
++        ESP_LOGI(BT_RC_CT_TAG, "remote rn_cap: count %d, bitmask 0x%x", rc->get_rn_caps_rsp.cap_count,
++                 rc->get_rn_caps_rsp.evt_set.bits);
++        s_avrc_peer_rn_cap.bits = rc->get_rn_caps_rsp.evt_set.bits;
+         bt_av_new_track();
++        bt_av_playback_changed();
++        bt_av_play_pos_changed();
+         break;
+     }
+     default:
+-        ESP_LOGE(BT_AV_TAG, "%s unhandled evt %d", __func__, event);
++        ESP_LOGE(BT_RC_CT_TAG, "%s unhandled evt %d", __func__, event);
++        break;
++    }
++}
++
++static void volume_set_by_controller(uint8_t volume)
++{
++    ESP_LOGI(BT_RC_TG_TAG, "Volume is set by remote controller %d%%\n", (uint32_t)volume * 100 / 0x7f);
++    _lock_acquire(&s_volume_lock);
++    s_volume = volume;
++    _lock_release(&s_volume_lock);
++}
++
++static void volume_set_by_local_host(uint8_t volume)
++{
++    ESP_LOGI(BT_RC_TG_TAG, "Volume is set locally to: %d%%", (uint32_t)volume * 100 / 0x7f);
++    _lock_acquire(&s_volume_lock);
++    s_volume = volume;
++    _lock_release(&s_volume_lock);
++
++    if (s_volume_notify) {
++        esp_avrc_rn_param_t rn_param;
++        rn_param.volume = s_volume;
++        esp_avrc_tg_send_rn_rsp(ESP_AVRC_RN_VOLUME_CHANGE, ESP_AVRC_RN_RSP_CHANGED, &rn_param);
++        s_volume_notify = false;
++    }
++}
++
++static void volume_change_simulation(void *arg)
++{
++    ESP_LOGI(BT_RC_TG_TAG, "start volume change simulation");
++
++    for (;;) {
++        vTaskDelay(10000 / portTICK_RATE_MS);
++
++        uint8_t volume = (s_volume + 5) & 0x7f;
++        volume_set_by_local_host(volume);
++    }
++}
++
++static void bt_av_hdl_avrc_tg_evt(uint16_t event, void *p_param)
++{
++    ESP_LOGD(BT_RC_TG_TAG, "%s evt %d", __func__, event);
++    esp_avrc_tg_cb_param_t *rc = (esp_avrc_tg_cb_param_t *)(p_param);
++    switch (event) {
++    case ESP_AVRC_TG_CONNECTION_STATE_EVT: {
++        uint8_t *bda = rc->conn_stat.remote_bda;
++        ESP_LOGI(BT_RC_TG_TAG, "AVRC conn_state evt: state %d, [%02x:%02x:%02x:%02x:%02x:%02x]",
++                 rc->conn_stat.connected, bda[0], bda[1], bda[2], bda[3], bda[4], bda[5]);
++        if (rc->conn_stat.connected) {
++            // create task to simulate volume change
++            xTaskCreate(volume_change_simulation, "vcsT", 2048, NULL, 5, &s_vcs_task_hdl);
++        } else {
++            vTaskDelete(s_vcs_task_hdl);
++            ESP_LOGI(BT_RC_TG_TAG, "Stop volume change simulation");
++        }
++        break;
++    }
++    case ESP_AVRC_TG_PASSTHROUGH_CMD_EVT: {
++        ESP_LOGI(BT_RC_TG_TAG, "AVRC passthrough cmd: key_code 0x%x, key_state %d", rc->psth_cmd.key_code, rc->psth_cmd.key_state);
++        break;
++    }
++    case ESP_AVRC_TG_SET_ABSOLUTE_VOLUME_CMD_EVT: {
++        ESP_LOGI(BT_RC_TG_TAG, "AVRC set absolute volume: %d%%", (int)rc->set_abs_vol.volume * 100/ 0x7f);
++        volume_set_by_controller(rc->set_abs_vol.volume);
++        break;
++    }
++    case ESP_AVRC_TG_REGISTER_NOTIFICATION_EVT: {
++        ESP_LOGI(BT_RC_TG_TAG, "AVRC register event notification: %d, param: 0x%x", rc->reg_ntf.event_id, rc->reg_ntf.event_parameter);
++        if (rc->reg_ntf.event_id == ESP_AVRC_RN_VOLUME_CHANGE) {
++            s_volume_notify = true;
++            esp_avrc_rn_param_t rn_param;
++            rn_param.volume = s_volume;
++            esp_avrc_tg_send_rn_rsp(ESP_AVRC_RN_VOLUME_CHANGE, ESP_AVRC_RN_RSP_INTERIM, &rn_param);
++        }
++        break;
++    }
++    case ESP_AVRC_TG_REMOTE_FEATURES_EVT: {
++        ESP_LOGI(BT_RC_TG_TAG, "AVRC remote features %x, CT features %x", rc->rmt_feats.feat_mask, rc->rmt_feats.ct_feat_flag);
++        break;
++    }
++    default:
++        ESP_LOGE(BT_RC_TG_TAG, "%s unhandled evt %d", __func__, event);
+         break;
+     }
+ }
+diff --git a/examples/bluetooth/a2dp_sink/main/bt_app_av.h b/examples/bluetooth/a2dp_sink/main/bt_app_av.h
+index 6648eb95e..46342daad 100644
+--- a/examples/bluetooth/a2dp_sink/main/bt_app_av.h
++++ b/examples/bluetooth/a2dp_sink/main/bt_app_av.h
+@@ -14,6 +14,8 @@
+ #include "esp_avrc_api.h"
+ 
+ #define BT_AV_TAG               "BT_AV"
++#define BT_RC_TG_TAG            "RCTG"
++#define BT_RC_CT_TAG            "RCCT"
+ 
+ /**
+  * @brief     callback function for A2DP sink
+@@ -30,4 +32,9 @@ void bt_app_a2d_data_cb(const uint8_t *data, uint32_t len);
+  */
+ void bt_app_rc_ct_cb(esp_avrc_ct_cb_event_t event, esp_avrc_ct_cb_param_t *param);
+ 
++/**
++ * @brief     callback function for AVRCP target
++ */
++void bt_app_rc_tg_cb(esp_avrc_tg_cb_event_t event, esp_avrc_tg_cb_param_t *param);
++
+ #endif /* __BT_APP_AV_H__*/
+diff --git a/examples/bluetooth/a2dp_sink/main/bt_app_core.c b/examples/bluetooth/a2dp_sink/main/bt_app_core.c
+index 528b34fc5..cd9aa99d5 100644
+--- a/examples/bluetooth/a2dp_sink/main/bt_app_core.c
++++ b/examples/bluetooth/a2dp_sink/main/bt_app_core.c
+@@ -96,7 +96,7 @@ static void bt_app_task_handler(void *arg)
+ void bt_app_task_start_up(void)
+ {
+     s_bt_app_task_queue = xQueueCreate(10, sizeof(bt_app_msg_t));
+-    xTaskCreate(bt_app_task_handler, "BtAppT", 2048, NULL, configMAX_PRIORITIES - 3, &s_bt_app_task_handle);
++    xTaskCreate(bt_app_task_handler, "BtAppT", 3072, NULL, configMAX_PRIORITIES - 3, &s_bt_app_task_handle);
+     return;
+ }
+ 
+diff --git a/examples/bluetooth/a2dp_sink/main/main.c b/examples/bluetooth/a2dp_sink/main/main.c
+index 830afe45e..3eb25c931 100644
+--- a/examples/bluetooth/a2dp_sink/main/main.c
++++ b/examples/bluetooth/a2dp_sink/main/main.c
+@@ -130,6 +130,7 @@ void app_main()
+     pin_code[2] = '3';
+     pin_code[3] = '4';
+     esp_bt_gap_set_pin(pin_type, 4, pin_code);
++
+ }
+ 
+ void bt_app_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param)
+@@ -171,14 +172,22 @@ static void bt_av_hdl_stack_evt(uint16_t event, void *p_param)
+         esp_bt_dev_set_device_name(dev_name);
+ 
+         esp_bt_gap_register_callback(bt_app_gap_cb);
+-        /* initialize A2DP sink */
+-        esp_a2d_register_callback(&bt_app_a2d_cb);
+-        esp_a2d_sink_register_data_callback(bt_app_a2d_data_cb);
+-        esp_a2d_sink_init();
+ 
+         /* initialize AVRCP controller */
+         esp_avrc_ct_init();
+         esp_avrc_ct_register_callback(bt_app_rc_ct_cb);
++        /* initialize AVRCP target */
++        assert (esp_avrc_tg_init() == ESP_OK);
++        esp_avrc_tg_register_callback(bt_app_rc_tg_cb);
++
++        esp_avrc_rn_evt_cap_mask_t evt_set = {0};
++        esp_avrc_rn_evt_bit_mask_operation(ESP_AVRC_BIT_MASK_OP_SET, &evt_set, ESP_AVRC_RN_VOLUME_CHANGE);
++        assert(esp_avrc_tg_set_rn_evt_cap(&evt_set) == ESP_OK);
++
++        /* initialize A2DP sink */
++        esp_a2d_register_callback(&bt_app_a2d_cb);
++        esp_a2d_sink_register_data_callback(bt_app_a2d_data_cb);
++        esp_a2d_sink_init();
+ 
+         /* set discoverable and connectable mode, wait to be connected */
+         esp_bt_gap_set_scan_mode(ESP_BT_SCAN_MODE_CONNECTABLE_DISCOVERABLE);
+-- 
+2.18.0
+
