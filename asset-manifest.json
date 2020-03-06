@@ -1,0 +1,23 @@
+{
+  "files": {
+    "main.css": "/esp-va-sdk/static/css/main.d94ef6ff.chunk.css",
+    "main.js": "/esp-va-sdk/static/js/main.b8978aaf.chunk.js",
+    "main.js.map": "/esp-va-sdk/static/js/main.b8978aaf.chunk.js.map",
+    "runtime-main.js": "/esp-va-sdk/static/js/runtime-main.adcbcf45.js",
+    "runtime-main.js.map": "/esp-va-sdk/static/js/runtime-main.adcbcf45.js.map",
+    "static/js/2.e6c8b656.chunk.js": "/esp-va-sdk/static/js/2.e6c8b656.chunk.js",
+    "static/js/2.e6c8b656.chunk.js.map": "/esp-va-sdk/static/js/2.e6c8b656.chunk.js.map",
+    "index.html": "/esp-va-sdk/index.html",
+    "precache-manifest.db65f2e420a490135c66f9c364bc3a4a.js": "/esp-va-sdk/precache-manifest.db65f2e420a490135c66f9c364bc3a4a.js",
+    "service-worker.js": "/esp-va-sdk/service-worker.js",
+    "static/css/main.d94ef6ff.chunk.css.map": "/esp-va-sdk/static/css/main.d94ef6ff.chunk.css.map",
+    "static/js/2.e6c8b656.chunk.js.LICENSE.txt": "/esp-va-sdk/static/js/2.e6c8b656.chunk.js.LICENSE.txt",
+    "static/media/Espressiflogo.svg": "/esp-va-sdk/static/media/Espressiflogo.84f501e3.svg"
+  },
+  "entrypoints": [
+    "static/js/runtime-main.adcbcf45.js",
+    "static/js/2.e6c8b656.chunk.js",
+    "static/css/main.d94ef6ff.chunk.css",
+    "static/js/main.b8978aaf.chunk.js"
+  ]
+}
