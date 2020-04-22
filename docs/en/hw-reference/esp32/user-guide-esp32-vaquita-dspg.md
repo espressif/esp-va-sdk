@@ -7,16 +7,17 @@ This user guide provides information on ESP32-Vaquita-DSPG.
 The ESP32-Vaquita-DSPG development board, together with *Alexa Voice Service (AVS) for AWS IoT*, provides a turnkey solution to easily create Alexa built-in IoT devices, which features voice enablement and AWS IoT cloud connectivity.
 
 ![ESP32-Vaquita-DSPG](../../../_static/esp32-vaquita-dspg-v1.0-top-view.png)
+<div align=center>ESP32-Vaquita-DSPG</div>
 
 The document consists of the following major sections:
 
-- [Getting started](#getting-started): Provides an overview of ESP32-Vaquita-DSPG and hardware/software setup instructions to get started.
-- [Hardware reference](#hardware-reference): Provides more detailed information about the ESP32-Vaquita-DSPG's hardware.
-- [Related Documents](#related-documents): Gives links to related documentaiton.
+- [Getting started](#1-getting-started): Provides an overview of ESP32-Vaquita-DSPG and hardware/software setup instructions to get started.
+- [Hardware reference](#2-hardware-reference): Provides more detailed information about the ESP32-Vaquita-DSPG's hardware.
+- [Related Documents](#3-related-documents): Gives links to related documentaiton.
 
 # 1. Getting Started
 
-This section describes how to get started with ESP32-Vaquita-DSPG. It begins with a few introductory sections about ESP32-Vaquita-DSPG, then Section [Start Application Development](#start-application-development) provides instructions on how to do the initial hardware setup and then how to flash firmware into ESP32-Vaquita-DSPG.
+This section describes how to get started with ESP32-Vaquita-DSPG. It begins with a few introductory sections about ESP32-Vaquita-DSPG, then Section [Start Application Development](#14-start-application-development) provides instructions on how to do the initial hardware setup and then how to flash firmware into ESP32-Vaquita-DSPG.
 
 ## 1.1 Overview
 
@@ -28,7 +29,7 @@ The ESP32-Vaquita-DSPG development board offers an easy, secure and cost-effecti
 
 If you order one or several samples, each ESP32-Vaquita-DSPG comes in an individual package which would contain:
 * ESP32-Vaquita-DSPG mainboard
-* ESP32-Vaquita-DSPG Mic board
+* ESP32-Vaquita-DSPG subboard
 * FPC cable
 
 For retail orders, please go to <https://www.espressif.com/en/company/contact/buy-a-sample>.
@@ -42,8 +43,10 @@ For wholesale orders, please check [Espressif Product Ordering Information](http
 ## 1.3 Description of Components
 
 ![ESP32-Vaquita-DSPG - mainboard front](../../../_static/esp32-vaquita-dspg-v1.0-annotated-photo.png)
+<div align=center>ESP32-Vaquita-DSPG Mainboard Front</div>
 
-![ESP32-Vaquita-DSPG - Mic front](../../../_static/esp32-vaquita-dspg-v1.0-annotated-photo-mic.png)
+![ESP32-Vaquita-DSPG - subboard front](../../../_static/esp32-vaquita-dspg-v1.0-annotated-photo-mic.png)
+<div align=center>ESP32-Vaquita-DSPG Subboard Front</div>
 
 |Key Componenet|Description|
 |:- |:- |
@@ -79,7 +82,7 @@ in good condition with no obvious signs of damage.
 
 ### 1.4.2 Hardware Setup
 
-1. Connect ESP32-Vaquita-DSPG Mic board to ESP32-Vaquita-DSPG mainboard through the FPC cable.
+1. Connect ESP32-Vaquita-DSPG subboard to ESP32-Vaquita-DSPG mainboard through the FPC cable.
 2. Connect a 4-ohm speaker to the Speaker Connector, or connect earphones to the Earphone Connector.
 3. Plug in the USB cables to the PC and to both USB ports of ESP32-Vaquita-DSPG.
 4. The Power On LED (Red) should turn on.
@@ -95,10 +98,14 @@ While this board can be used for variety of applications, one of the primary app
 A block diagram below shows the components of ESP32-Vaquita-DSPG and their interconnections.
 
 ![ESP32-Vaquita-DSPG](../../../_static/esp32-vaquita-dspg-v1.0-block-diagram.png)
+<div align=center>ESP32-Vaquita-DSPG Block Diagram</div>
 
 # 3. Related Documents
 
 * [ESP32-Vaquita-DSPG Mainboard Schematics](https://dl.espressif.com/dl/schematics/ESP32-VAQUITA-DSPG_V1.0_schematics.pdf) (PDF)
-* [ESP32-Vaquita-DSPG Mic Schematics](https://dl.espressif.com/dl/schematics/ESP32-VAQUITA-DSPG-MIC_V1.0_schematics.pdf) (PDF)
+* [ESP32-Vaquita-DSPG Subboard Schematics](https://dl.espressif.com/dl/schematics/ESP32-VAQUITA-DSPG-MIC_V1.0_schematics.pdf) (PDF)
+* [ESP32-Vaquita-DSPG Mainboard PCB Layout](https://dl.espressif.com/dl/schematics/ESP32-Vaquita-DSPG_V1.0_PCB_Layout.pdf) (PDF)
+* [ESP32-Vaquita-DSPG Subboard PCB Layout](https://dl.espressif.com/dl/schematics/ESP32-Vaquita-DSPG-MIC_V1.0_PCB_Layout.pdf) (PDF)
+* [ESP32-WROVER-E & ESP32-WROVER-IE Datasheet](https://www.espressif.com/sites/default/files/documentation/esp32-wrover-e_esp32-wrover-ie_datasheet_en.pdf) (PDF)
 * [ESP32 Datasheet](https://www.espressif.com/sites/default/files/documentation/esp32_datasheet_en.pdf) (PDF)
 * [Espressif Product Ordering Information](https://www.espressif.com/sites/default/files/documentation/espressif_products_ordering_information_en.pdf) (PDF)

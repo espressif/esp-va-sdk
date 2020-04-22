@@ -7,16 +7,17 @@
 ESP32-Vaquita-DSPG 基于亚马逊物联网平台 (AWS IoT) 的 Alexa 语音服务 (AVS) 为用户提供了一站式方案（Turnkey），可以帮助用户轻松构建集成亚马逊 Alexa、具备语音功能、连接 AWS IoT 平台的物联网设备。
 
 ![ESP32-Vaquita-DSPG](../../../_static/esp32-vaquita-dspg-v1.0-top-view.png)
+<div align=center>ESP32-Vaquita-DSPG</div>
 
 本指南包括如下内容：
 
-* [入门指南](#入门指南): 简要介绍了 ESP32-Vaquita-DSPG 和硬件、软件设置指南。
-* [硬件参考](#硬件参考): 详细介绍了 ESP32-Vaquita-DSPG 的硬件。
-* [相关文档](#相关文档): 列出了相关文档的链接。
+* [入门指南](#1-入门指南): 简要介绍了 ESP32-Vaquita-DSPG 和硬件、软件设置指南。
+* [硬件参考](#2-硬件参考): 详细介绍了 ESP32-Vaquita-DSPG 的硬件。
+* [相关文档](#3-相关文档): 列出了相关文档的链接。
 
 # 1. 入门指南
 
-本节介绍了如何快速上手 ESP32-Vaquita-DSPG。开头部分介绍了 ESP32-Vaquita-DSPG，[开始开发应用](#开始开发应用) 小节介绍了怎样在 ESP32-Vaquita-DSPG 上安装模组、设置和烧录固件。
+本节介绍了如何快速上手 ESP32-Vaquita-DSPG。开头部分介绍了 ESP32-Vaquita-DSPG，[开始开发应用](#14-开始开发应用) 小节介绍了怎样在 ESP32-Vaquita-DSPG 上安装模组、设置和烧录固件。
 
 ## 1.1 概述
 
@@ -28,7 +29,7 @@ ESP32-Vaquita-DSPG 为用户提供了便捷、安全、高性价比的方式开�
 
 如购买样品，每个 ESP32-Vaquita-DSPG 将单独包装，内含：
 * ESP32-Vaquita-DSPG 主板
-* ESP32-Vaquita-DSPG 麦克风阵列板
+* ESP32-Vaquita-DSPG 子板
 * FPC 排线
 
 零售订单请前往 <https://www.espressif.com/zh-hans/company/contact/buy-a-sample>。
@@ -42,8 +43,10 @@ ESP32-Vaquita-DSPG 为用户提供了便捷、安全、高性价比的方式开�
 ## 1.3 组件介绍
 
 ![ESP32-Vaquita-DSPG - 主板正面](../../../_static/esp32-vaquita-dspg-v1.0-annotated-photo.png)
+<div align=center>ESP32-Vaquita-DSPG 主板正面</div>
 
-![ESP32-Vaquita-DSPG - 麦克风阵列板正面](../../../_static/esp32-vaquita-dspg-v1.0-annotated-photo-mic.png)
+![ESP32-Vaquita-DSPG - 子板正面](../../../_static/esp32-vaquita-dspg-v1.0-annotated-photo-mic.png)
+<div align=center>ESP32-Vaquita-DSPG 子板正面</div>
 
 |主要组件|介绍|
 |:- |:- |
@@ -78,14 +81,14 @@ ESP32-Vaquita-DSPG 为用户提供了便捷、安全、高性价比的方式开�
 
 ### 1.4.2 硬件设置
 
-1. 使用 FPC 排线连接 ESP32-Vaquita-DSPG 麦克风阵列板和 ESP32-Vaquita-DSPG 主板。
+1. 使用 FPC 排线连接 ESP32-Vaquita-DSPG 子板和 ESP32-Vaquita-DSPG 主板。
 2. 将 4 欧姆扬声器接至扬声器连接器，或将耳机接至耳机连接器。
 3. 使用两根 USB 数据线连接电脑与 ESP32-Vaquita-DSPG 的两个 USB 接口。
 4. 电源指示 LED 应该亮红灯。
 
 ### 1.4.3 软件设置
 
-本款开发板可支持多种应用场景，其中最主要的应用场景是亚马逊物联网平台 (AWS IoT) 的 Alexa 语音服务（Alexa Voice Service，简称 AVS）。您可下载乐鑫的 [亚马逊 AVS SDK](https://github.com/espressif/esp-va-sdk/tree/feature/aia-beta)，参考[使用指南](https://github.com/espressif/esp-va-sdk/blob/feature/aia-beta/README.md)。
+本款开发板可支持多种应用场景，其中最主要的应用场景是亚马逊物联网平台 (AWS IoT) 的 Alexa 语音服务（Alexa Voice Service，简称 AVS）。您可下载乐鑫的 [ESP AVS for AWS IoT](https://github.com/espressif/esp-va-sdk/tree/feature/aia-beta)，参考[使用指南](https://github.com/espressif/esp-va-sdk/blob/feature/aia-beta/README.md)。
 
 # 2. 硬件参考
 
@@ -94,10 +97,14 @@ ESP32-Vaquita-DSPG 为用户提供了便捷、安全、高性价比的方式开�
 ESP32-Vaquita-DSPG 的主要组件和连接方式如下图所示。
 
 ![ESP32-Vaquita-DSPG](../../../_static/esp32-vaquita-dspg-v1.0-block-diagram.png)
+<div align=center>ESP32-Vaquita-DSPG 功能框图</div>
 
 # 3. 相关文档
 
 * [ESP32-Vaquita-DSPG 主板原理图](https://dl.espressif.com/dl/schematics/ESP32-VAQUITA-DSPG_V1.0_schematics.pdf) (PDF)
-* [ESP32-Vaquita-DSPG 麦克风阵列版原理图](https://dl.espressif.com/dl/schematics/ESP32-VAQUITA-DSPG-MIC_V1.0_schematics.pdf) (PDF)
+* [ESP32-Vaquita-DSPG 子板原理图](https://dl.espressif.com/dl/schematics/ESP32-VAQUITA-DSPG-MIC_V1.0_schematics.pdf) (PDF)
+* [ESP32-Vaquita-DSPG 主板 PCB 布局](https://dl.espressif.com/dl/schematics/ESP32-Vaquita-DSPG_V1.0_PCB_Layout.pdf) (PDF)
+* [ESP32-Vaquita-DSPG 子板 PCB 布局](https://dl.espressif.com/dl/schematics/ESP32-Vaquita-DSPG-MIC_V1.0_PCB_Layout.pdf) (PDF)
+* [ESP32-WROVER-E & ESP32-WROVER-IE 技术规格书](https://www.espressif.com/sites/default/files/documentation/esp32-wrover-e_esp32-wrover-ie_datasheet_cn.pdf) (PDF)
 * [ESP32 技术规格书](https://www.espressif.com/sites/default/files/documentation/esp32_datasheet_cn.pdf) (PDF)
 * [乐鑫产品订购信息](https://www.espressif.com/sites/default/files/documentation/espressif_products_ordering_information_cn.pdf)  (PDF)
