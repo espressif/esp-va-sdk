@@ -3,11 +3,13 @@ Google Voice Assistant(GVA) is Google's version of a personal voice assistant. G
 
 # Project Setup
 * Before proceeding with device configuration, make sure you have read and followed the [Getting Started Guide](../../README-Getting-Started.md).
-* Follow the steps specified in this [link](https://developers.google.com/assistant/sdk/guides/library/python/embed/config-dev-project-and-account) and execute the following sections:
+* Follow the steps specified in this [link](https://developers.google.com/assistant/sdk/guides/service/python/embed/config-dev-project-and-account) and execute the following sections:
   * Configure an Actions Console project
   * Set activity controls for your account
   * Register the Device Model using the registration UI
-  * Generate credentials
+  * Download credentials
+* After the above steps you should have a file with the name client_secret_<client_id>.json. Now execute the first 3 steps in the section `Get an access token` in this [link](https://developers.google.com/assistant/sdk/reference/device-registration/register-device-manual#get-access-token).
+* You should now have a json with the `client_id`, `client_secret` and the `refresh_token` needed for the `Device Configuration`. (You can save this json for future use.)
 
 # Device Configuration
 * Modify the example application (app_main.c) provided in this SDK, to add the `Model ID` and `Device ID` (of your project) in the `device_model` and `device_id` members of `device_config` before making a call to `gva_init()`
@@ -17,9 +19,9 @@ Google Voice Assistant(GVA) is Google's version of a personal voice assistant. G
 * Make sure to enter the nvs-set commands first and then the wifi-set command.
 ```
 [Enter]
->> nvs-set refreshToken string <refresh_token_from_credentials.json>
->> nvs-set clientId string <client_id_from_credentials.json>
->> nvs-set clientSecret string <client_secret_from_credentials.json>
+>> nvs-set refreshToken string <refresh_token_from_json>
+>> nvs-set clientId string <client_id_from_json>
+>> nvs-set clientSecret string <client_secret_from_json>
 ```
 * Use below CLI command to configure device's station interface
 ```
