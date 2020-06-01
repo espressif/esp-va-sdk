@@ -36,7 +36,7 @@ ESP32-Vaquita-DSPG 为用户提供了便捷、安全、高性价比的方式开�
 
 ### 1.2.2 批量订单
 
-如批量购买，开放版将以大纸板箱包装。
+如批量购买，开发板将以大纸板箱包装。
 
 批量订单请参考[乐鑫产品订购信息](https://www.espressif.com/sites/default/files/documentation/espressif_products_ordering_information_cn.pdf) (PDF) 。
 
@@ -50,7 +50,7 @@ ESP32-Vaquita-DSPG 为用户提供了便捷、安全、高性价比的方式开�
 
 |主要组件|介绍|
 |:- |:- |
-|ESP32-WROVER-E|这款 ESP32 模组内置 ESP32-D0WD-V3 芯片、64 Mbit SPI flash 和 64 Mbit PSRAM，可灵活存储数据，具有 Wi-Fi / BT 连接和数据处理能力。|
+|ESP32-WROVER-E|这款 ESP32 模组内置 ESP32-D0WD-V3 芯片、128 Mbit flash<sup>1</sup> 和 64 Mbit PSRAM，可灵活存储数据，具有 Wi-Fi / BT 连接和数据处理能力。|
 |DBMD5P 音频 SoC|这款芯片采用 HDClear™ 算法，具有出色的原厂语音识别性能。|
 |电源稳压器|5V 转 3.3V 稳压器。|
 |USB 电源接口|为开发板供电。|
@@ -67,6 +67,8 @@ ESP32-Vaquita-DSPG 为用户提供了便捷、安全、高性价比的方式开�
 |数字麦克风|两个数字麦克风阵列。|
 |RGB LED|五个红绿蓝发光二极管。|
 |Function 键|两个功能键。|
+
+> <sup>1</sup>：乐鑫 2020 年 5 月份前发货的开发板为 64 Mbit flash，5 月份开始发货的开发板为 128 Mbit flash。
 
 ## 1.4 开始开发应用
 

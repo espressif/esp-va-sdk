@@ -28,6 +28,7 @@ The ESP32-Vaquita-DSPG development board offers an easy, secure and cost-effecti
 ### 1.2.1 Retail orders
 
 If you order one or several samples, each ESP32-Vaquita-DSPG comes in an individual package which would contain:
+
 * ESP32-Vaquita-DSPG mainboard
 * ESP32-Vaquita-DSPG subboard
 * FPC cable
@@ -50,7 +51,7 @@ For wholesale orders, please check [Espressif Product Ordering Information](http
 
 |Key Componenet|Description|
 |:- |:- |
-|ESP32-WROVER-E|This ESP32 module contains the latest ESP32-D0WD-V3, a 64 Mbit SPI flash and a 64 Mbit PSRAM for flexible data storage, featuring Wi-Fi / BT connectivity and data processing capability.|
+|ESP32-WROVER-E|This ESP32 module contains the latest ESP32-D0WD-V3, a 128 Mbit SPI flash<sup>1</sup> and a 64 Mbit PSRAM for flexible data storage, featuring Wi-Fi / BT connectivity and data processing capability.|
 |DBMD5P Audio SoC|This SoC features superior far-field voice recognition fulfilled by its HDClear™ algorithms.|
 |Power Regulator| 5V-to-3.3V regulator.|
 |USB Power Port| Supply power to the board.|
@@ -67,7 +68,9 @@ For wholesale orders, please check [Espressif Product Ordering Information](http
 |Digital Microphone|Two digital microphone arrays.|
 |RGB LED|Five RGB LEDs.|
 |Function Button|Two function buttons.|
-  
+
+> <sup>1</sup>：ESP32-Vaquita-DSPG boards delivered by Espressif before May 2020 are embedded with 64 Mbit flash; after that date with 128 Mbit flash.
+
 ## 1.4 Start Application Development
 
 Before powering up your ESP32-Vaquita-DSPG, please make sure that it is
