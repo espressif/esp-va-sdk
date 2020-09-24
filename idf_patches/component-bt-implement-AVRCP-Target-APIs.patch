@@ -1,4 +1,4 @@
-From 588edc733a934d8c749a341598c1c44e7266a71e Mon Sep 17 00:00:00 2001
+From c7b468de1478a912e80793b7797aa9f2046a7510 Mon Sep 17 00:00:00 2001
 From: wangmengyang <wangmengyang@espressif.com>
 Date: Fri, 21 Dec 2018 17:04:21 +0800
 Subject: [PATCH 1/2] component/bt: implement AVRCP Target APIs
@@ -24,7 +24,7 @@ Subject: [PATCH 1/2] component/bt: implement AVRCP Target APIs
  components/bt/bluedroid/bta/av/bta_av_aact.c  |   20 -
  components/bt/bluedroid/bta/av/bta_av_act.c   |   93 +-
  components/bt/bluedroid/bta/av/bta_av_api.c   |    5 +-
- components/bt/bluedroid/bta/av/bta_av_cfg.c   |  110 +-
+ components/bt/bluedroid/bta/av/bta_av_cfg.c   |  104 --
  components/bt/bluedroid/bta/av/bta_av_main.c  |    6 +-
  .../bt/bluedroid/bta/av/include/bta_av_int.h  |    9 +-
  .../bt/bluedroid/bta/include/bta/bta_av_api.h |   46 +-
@@ -50,11 +50,11 @@ Subject: [PATCH 1/2] component/bt: implement AVRCP Target APIs
  examples/bluetooth/a2dp_sink/main/bt_app_av.h |    7 +
  .../bluetooth/a2dp_sink/main/bt_app_core.c    |    2 +-
  examples/bluetooth/a2dp_sink/main/main.c      |   17 +-
- 32 files changed, 2449 insertions(+), 462 deletions(-)
+ 32 files changed, 2446 insertions(+), 459 deletions(-)
  create mode 100644 components/bt/bluedroid/btc/profile/std/avrc/bta_avrc_co.c
 
 diff --git a/components/bt/CMakeLists.txt b/components/bt/CMakeLists.txt
-index 8f6d0a47c..ad63565ef 100644
+index 8f6d0a47c4..ad63565ef1 100644
 --- a/components/bt/CMakeLists.txt
 +++ b/components/bt/CMakeLists.txt
 @@ -133,6 +133,7 @@ if(CONFIG_BT_ENABLED)
@@ -66,7 +66,7 @@ index 8f6d0a47c..ad63565ef 100644
                     "bluedroid/btc/profile/std/gap/btc_gap_bt.c"
                     "bluedroid/btc/profile/std/gatt/btc_gatt_common.c"
 diff --git a/components/bt/bluedroid/api/esp_avrc_api.c b/components/bt/bluedroid/api/esp_avrc_api.c
-index 3c80c5381..9b9e6616c 100644
+index 3c80c53816..9b9e6616c2 100644
 --- a/components/bt/bluedroid/api/esp_avrc_api.c
 +++ b/components/bt/bluedroid/api/esp_avrc_api.c
 @@ -32,7 +32,7 @@ esp_err_t esp_avrc_ct_register_callback(esp_avrc_ct_cb_t callback)
@@ -423,7 +423,7 @@ index 3c80c5381..9b9e6616c 100644
 +
  #endif /* #if BTC_AV_INCLUDED */
 diff --git a/components/bt/bluedroid/api/include/api/esp_avrc_api.h b/components/bt/bluedroid/api/include/api/esp_avrc_api.h
-index e1f68392c..814f2be33 100644
+index e1f68392c8..814f2be338 100644
 --- a/components/bt/bluedroid/api/include/api/esp_avrc_api.h
 +++ b/components/bt/bluedroid/api/include/api/esp_avrc_api.h
 @@ -34,17 +34,97 @@ typedef enum {
@@ -984,7 +984,7 @@ index e1f68392c..814f2be33 100644
  }
  #endif
 diff --git a/components/bt/bluedroid/bta/av/bta_av_aact.c b/components/bt/bluedroid/bta/av/bta_av_aact.c
-index 27970a990..52f0809ab 100644
+index 27970a990a..52f0809ab6 100644
 --- a/components/bt/bluedroid/bta/av/bta_av_aact.c
 +++ b/components/bt/bluedroid/bta/av/bta_av_aact.c
 @@ -73,26 +73,6 @@ enum {
@@ -1015,7 +1015,7 @@ index 27970a990..52f0809ab 100644
  const tBTA_AV_SACT bta_av_a2d_action[] = {
      bta_av_do_disc_a2d,     /* BTA_AV_DO_DISC  */
 diff --git a/components/bt/bluedroid/bta/av/bta_av_act.c b/components/bt/bluedroid/bta/av/bta_av_act.c
-index 195af55a1..bc5484add 100644
+index 195af55a1c..bc5484add1 100644
 --- a/components/bt/bluedroid/bta/av/bta_av_act.c
 +++ b/components/bt/bluedroid/bta/av/bta_av_act.c
 @@ -335,6 +335,8 @@ UINT8 bta_av_rc_create(tBTA_AV_CB *p_cb, UINT8 role, UINT8 shdl, UINT8 lidx)
@@ -1243,7 +1243,7 @@ index 195af55a1..bc5484add 100644
              if (p_rcb->shdl) {
                  if ((p_rcb->shdl - 1) < BTA_AV_NUM_STRS) {
 diff --git a/components/bt/bluedroid/bta/av/bta_av_api.c b/components/bt/bluedroid/bta/av/bta_av_api.c
-index a0daa89f1..2876fb1e2 100644
+index dc1dea2201..284cd8c523 100644
 --- a/components/bt/bluedroid/bta/av/bta_av_api.c
 +++ b/components/bt/bluedroid/bta/av/bta_av_api.c
 @@ -105,7 +105,9 @@ void BTA_AvDisable(void)
@@ -1266,27 +1266,11 @@ index a0daa89f1..2876fb1e2 100644
          bta_sys_sendmsg(p_buf);
      }
 diff --git a/components/bt/bluedroid/bta/av/bta_av_cfg.c b/components/bt/bluedroid/bta/av/bta_av_cfg.c
-index 144df6ea3..b8a86831c 100644
+index 4280d28003..9d2da69925 100644
 --- a/components/bt/bluedroid/bta/av/bta_av_cfg.c
 +++ b/components/bt/bluedroid/bta/av/bta_av_cfg.c
-@@ -41,7 +41,7 @@ const UINT32  bta_av_meta_caps_co_ids[] = {
- };
- 
- /* AVRCP cupported categories */
--#define BTA_AV_RC_SUPF_CT       (AVRC_SUPF_CT_CAT2)
-+#define BTA_AV_RC_SUPF_CT       (AVRC_SUPF_CT_CAT1)
- 
- /* Added to modify
- **  1. flush timeout
-@@ -62,26 +62,11 @@ const UINT16  bta_av_audio_flush_to[] = {
- /* Note: Android doesnt support AVRC_SUPF_TG_GROUP_NAVI  */
- /* Note: if AVRC_SUPF_TG_GROUP_NAVI is set, bta_av_cfg.avrc_group should be TRUE */
- #if AVRC_METADATA_INCLUDED == TRUE
--#define BTA_AV_RC_SUPF_TG       (AVRC_SUPF_TG_CAT1) /* TODO: | AVRC_SUPF_TG_APP_SETTINGS) */
-+#define BTA_AV_RC_SUPF_TG       (AVRC_SUPF_TG_CAT2) /* TODO: | AVRC_SUPF_TG_APP_SETTINGS) */
- #else
--#define BTA_AV_RC_SUPF_TG       (AVRC_SUPF_TG_CAT1)
-+#define BTA_AV_RC_SUPF_TG       (AVRC_SUPF_TG_CAT2)
+@@ -70,21 +70,6 @@ const UINT16  bta_av_audio_flush_to[] = {
+ #define BTA_AV_RC_SRC_SUPF_TG       (AVRC_SUPF_TG_CAT1)
  #endif
  
 -/*
@@ -1307,7 +1291,7 @@ index 144df6ea3..b8a86831c 100644
  /* the MTU for the AVRCP browsing channel */
  #ifndef BTA_AV_MAX_RC_BR_MTU
  #define BTA_AV_MAX_RC_BR_MTU      1008
-@@ -105,10 +90,8 @@ const tBTA_AV_CFG bta_av_cfg = {
+@@ -110,10 +95,8 @@ const tBTA_AV_CFG bta_av_cfg = {
      600,                    /* AVDTP video transport channel flush timeout */
      FALSE,                   /* TRUE, to accept AVRC 1.3 group nevigation command */
      2,                      /* company id count in p_meta_co_ids */
@@ -1318,7 +1302,7 @@ index 144df6ea3..b8a86831c 100644
      NULL,                   /* the action function table for VDP stream */
      NULL,                   /* action function to register VDP */
      {0},                    /* Default AVRCP controller name */
-@@ -117,91 +100,4 @@ const tBTA_AV_CFG bta_av_cfg = {
+@@ -122,91 +105,4 @@ const tBTA_AV_CFG bta_av_cfg = {
  
  tBTA_AV_CFG *p_bta_av_cfg = (tBTA_AV_CFG *) &bta_av_cfg;
  
@@ -1411,10 +1395,10 @@ index 144df6ea3..b8a86831c 100644
 -
  #endif /* if defined(BTA_AV_INCLUDED) && (BTA_AV_INCLUDED == TRUE) */
 diff --git a/components/bt/bluedroid/bta/av/bta_av_main.c b/components/bt/bluedroid/bta/av/bta_av_main.c
-index b75a8ddd9..bc352c8fa 100644
+index 800e7e401b..77d43c0425 100644
 --- a/components/bt/bluedroid/bta/av/bta_av_main.c
 +++ b/components/bt/bluedroid/bta/av/bta_av_main.c
-@@ -534,6 +534,11 @@ static void bta_av_api_register(tBTA_AV_DATA *p_data)
+@@ -533,6 +533,11 @@ static void bta_av_api_register(tBTA_AV_DATA *p_data)
      registr.app_id = p_data->api_reg.app_id;
      registr.chnl   = (tBTA_AV_CHNL)p_data->hdr.layer_specific;
      registr.p_bta_av_cos = p_data->api_reg.bta_av_cos;
@@ -1426,7 +1410,7 @@ index b75a8ddd9..bc352c8fa 100644
      do {
          p_scb = bta_av_alloc_scb(registr.chnl);
          if (p_scb == NULL) {
-@@ -619,7 +624,6 @@ static void bta_av_api_register(tBTA_AV_DATA *p_data)
+@@ -622,7 +627,6 @@ static void bta_av_api_register(tBTA_AV_DATA *p_data)
          if (registr.chnl == BTA_AV_CHNL_AUDIO) {
              /* set up the audio stream control block */
              p_scb->p_act_tbl = (const tBTA_AV_ACT *)bta_av_a2d_action;
@@ -1435,7 +1419,7 @@ index b75a8ddd9..bc352c8fa 100644
              p_scb->media_type = AVDT_MEDIA_AUDIO;
              cs.cfg.psc_mask  = AVDT_PSC_TRANS;
 diff --git a/components/bt/bluedroid/bta/av/include/bta_av_int.h b/components/bt/bluedroid/bta/av/include/bta_av_int.h
-index 16b3f38df..16a70f3ef 100644
+index 16b3f38dfe..16a70f3ef3 100644
 --- a/components/bt/bluedroid/bta/av/include/bta_av_int.h
 +++ b/components/bt/bluedroid/bta/av/include/bta_av_int.h
 @@ -174,6 +174,7 @@ typedef struct {
@@ -1477,7 +1461,7 @@ index 16b3f38df..16a70f3ef 100644
  extern tAVDT_CTRL_CBACK *const bta_av_dt_cback[];
  extern void bta_av_stream_data_cback(UINT8 handle, BT_HDR *p_pkt, UINT32 time_stamp, UINT8 m_pt);
 diff --git a/components/bt/bluedroid/bta/include/bta/bta_av_api.h b/components/bt/bluedroid/bta/include/bta/bta_av_api.h
-index 87c2d374a..351c0bc61 100644
+index 21ce307b44..5efc2662c4 100644
 --- a/components/bt/bluedroid/bta/include/bta/bta_av_api.h
 +++ b/components/bt/bluedroid/bta/include/bta/bta_av_api.h
 @@ -279,20 +279,35 @@ typedef void *(*tBTA_AV_CO_DATAPATH) (tBTA_AV_CODEC codec_type,
@@ -1552,7 +1536,7 @@ index 87c2d374a..351c0bc61 100644
  } tBTA_AV_RC_FEAT;
  
  /* data associated with BTA_AV_REMOTE_CMD_EVT */
-@@ -519,10 +539,8 @@ typedef struct {
+@@ -521,10 +541,8 @@ typedef struct {
      UINT16  video_flush_to;     /* AVDTP video transport channel flush timeout */
      BOOLEAN avrc_group;         /* TRUE, to accept AVRC 1.3 group nevigation command */
      UINT8   num_co_ids;         /* company id count in p_meta_co_ids */
@@ -1563,7 +1547,7 @@ index 87c2d374a..351c0bc61 100644
      const tBTA_AV_ACT *p_act_tbl;/* the action function table for VDP stream */
      tBTA_AV_REG       *p_reg;   /* action function to register VDP */
      char              avrc_controller_name[BTA_SERVICE_NAME_LEN]; /* Default AVRCP controller name */
-@@ -580,7 +598,9 @@ void BTA_AvDisable(void);
+@@ -582,7 +600,9 @@ void BTA_AvDisable(void);
  **
  *******************************************************************************/
  void BTA_AvRegister(tBTA_AV_CHNL chnl, const char *p_service_name,
@@ -1575,7 +1559,7 @@ index 87c2d374a..351c0bc61 100644
  /*******************************************************************************
  **
 diff --git a/components/bt/bluedroid/btc/core/btc_task.c b/components/bt/bluedroid/btc/core/btc_task.c
-index 1022e770d..338d6841f 100644
+index 1022e770d1..338d6841f0 100644
 --- a/components/bt/bluedroid/btc/core/btc_task.c
 +++ b/components/bt/bluedroid/btc/core/btc_task.c
 @@ -78,7 +78,8 @@ static btc_func_t profile_tab[BTC_PID_NUM] = {
@@ -1589,7 +1573,7 @@ index 1022e770d..338d6841f 100644
  #if CONFIG_BT_SPP_ENABLED
      [BTC_PID_SPP]         = {btc_spp_call_handler,        btc_spp_cb_handler      },
 diff --git a/components/bt/bluedroid/btc/include/btc/btc_task.h b/components/bt/bluedroid/btc/include/btc/btc_task.h
-index 5813c5217..ca5abd375 100644
+index 5813c52178..ca5abd3759 100644
 --- a/components/bt/bluedroid/btc/include/btc/btc_task.h
 +++ b/components/bt/bluedroid/btc/include/btc/btc_task.h
 @@ -57,7 +57,8 @@ typedef enum {
@@ -1603,7 +1587,7 @@ index 5813c5217..ca5abd375 100644
  #if BTC_HF_CLIENT_INCLUDED
      BTC_PID_HF_CLIENT,
 diff --git a/components/bt/bluedroid/btc/profile/std/a2dp/btc_av.c b/components/bt/bluedroid/btc/profile/std/a2dp/btc_av.c
-index dee8c8fba..f428150ba 100644
+index dee8c8fbab..f428150bae 100644
 --- a/components/bt/bluedroid/btc/profile/std/a2dp/btc_av.c
 +++ b/components/bt/bluedroid/btc/profile/std/a2dp/btc_av.c
 @@ -148,6 +148,7 @@ static void btc_av_event_free_data(btc_sm_event_t event, void *p_data);
@@ -1625,7 +1609,7 @@ index dee8c8fba..f428150ba 100644
          BTA_AvDisable();
 diff --git a/components/bt/bluedroid/btc/profile/std/avrc/bta_avrc_co.c b/components/bt/bluedroid/btc/profile/std/avrc/bta_avrc_co.c
 new file mode 100644
-index 000000000..793e296cb
+index 0000000000..793e296cb5
 --- /dev/null
 +++ b/components/bt/bluedroid/btc/profile/std/avrc/bta_avrc_co.c
 @@ -0,0 +1,106 @@
@@ -1736,7 +1720,7 @@ index 000000000..793e296cb
 +
 +#endif /* #if BTC_AV_INCLUDED */
 diff --git a/components/bt/bluedroid/btc/profile/std/avrc/btc_avrc.c b/components/bt/bluedroid/btc/profile/std/avrc/btc_avrc.c
-index 539760b92..6e204be48 100644
+index b62ff866d4..c4341b6888 100644
 --- a/components/bt/bluedroid/btc/profile/std/avrc/btc_avrc.c
 +++ b/components/bt/bluedroid/btc/profile/std/avrc/btc_avrc.c
 @@ -38,17 +38,14 @@
@@ -3038,7 +3022,7 @@ index 539760b92..6e204be48 100644
 +
  #endif /* #if BTC_AV_INCLUDED */
 diff --git a/components/bt/bluedroid/btc/profile/std/include/btc_avrc.h b/components/bt/bluedroid/btc/profile/std/include/btc_avrc.h
-index 2a66b8b27..7eaabecc1 100644
+index 2a66b8b275..7eaabecc17 100644
 --- a/components/bt/bluedroid/btc/profile/std/include/btc_avrc.h
 +++ b/components/bt/bluedroid/btc/profile/std/include/btc_avrc.h
 @@ -22,6 +22,8 @@
@@ -3139,7 +3123,7 @@ index 2a66b8b27..7eaabecc1 100644
  #endif  ///BTC_AV_INCLUDED == TRUE
  
 diff --git a/components/bt/bluedroid/stack/avrc/avrc_bld_ct.c b/components/bt/bluedroid/stack/avrc/avrc_bld_ct.c
-index 122f971ed..181068706 100644
+index 122f971ed0..1810687066 100644
 --- a/components/bt/bluedroid/stack/avrc/avrc_bld_ct.c
 +++ b/components/bt/bluedroid/stack/avrc/avrc_bld_ct.c
 @@ -237,6 +237,22 @@ static tAVRC_STS avrc_bld_get_element_attr_cmd (tAVRC_GET_ELEM_ATTRS_CMD *p_cmd,
@@ -3176,7 +3160,7 @@ index 122f971ed..181068706 100644
  
      if (alloc && (status != AVRC_STS_NO_ERROR) ) {
 diff --git a/components/bt/bluedroid/stack/avrc/avrc_bld_tg.c b/components/bt/bluedroid/stack/avrc/avrc_bld_tg.c
-index d7df3b451..796238298 100644
+index d7df3b4519..7962382980 100644
 --- a/components/bt/bluedroid/stack/avrc/avrc_bld_tg.c
 +++ b/components/bt/bluedroid/stack/avrc/avrc_bld_tg.c
 @@ -593,6 +593,10 @@ static tAVRC_STS avrc_bld_notify_rsp (tAVRC_REG_NOTIF_RSP *p_rsp, BT_HDR *p_pkt)
@@ -3237,7 +3221,7 @@ index d7df3b451..796238298 100644
  
      if (alloc && (status != AVRC_STS_NO_ERROR) ) {
 diff --git a/components/bt/bluedroid/stack/avrc/avrc_pars_ct.c b/components/bt/bluedroid/stack/avrc/avrc_pars_ct.c
-index b847e78a5..f185e7b56 100644
+index b847e78a5c..f185e7b569 100644
 --- a/components/bt/bluedroid/stack/avrc/avrc_pars_ct.c
 +++ b/components/bt/bluedroid/stack/avrc/avrc_pars_ct.c
 @@ -90,9 +90,28 @@ static tAVRC_STS avrc_pars_vendor_rsp(tAVRC_MSG_VENDOR *p_msg, tAVRC_RESPONSE *p
@@ -3286,7 +3270,7 @@ index b847e78a5..f185e7b56 100644
      if (p_msg && p_result) {
          switch (p_msg->hdr.opcode) {
 diff --git a/components/bt/bluedroid/stack/avrc/avrc_pars_tg.c b/components/bt/bluedroid/stack/avrc/avrc_pars_tg.c
-index c45019933..c30bf94a3 100644
+index c45019933d..c30bf94a3b 100644
 --- a/components/bt/bluedroid/stack/avrc/avrc_pars_tg.c
 +++ b/components/bt/bluedroid/stack/avrc/avrc_pars_tg.c
 @@ -249,6 +249,9 @@ static tAVRC_STS avrc_pars_vendor_cmd(tAVRC_MSG_VENDOR *p_msg, tAVRC_COMMAND *p_
@@ -3300,7 +3284,7 @@ index c45019933..c30bf94a3 100644
          break;
      }
 diff --git a/components/bt/bluedroid/stack/avrc/avrc_sdp.c b/components/bt/bluedroid/stack/avrc/avrc_sdp.c
-index 4ef993dcc..d3616f323 100644
+index 4ef993dcc8..d3616f3233 100644
 --- a/components/bt/bluedroid/stack/avrc/avrc_sdp.c
 +++ b/components/bt/bluedroid/stack/avrc/avrc_sdp.c
 @@ -30,7 +30,7 @@
@@ -3313,7 +3297,7 @@ index 4ef993dcc..d3616f323 100644
  
  #ifndef SDP_AVCTP_1_4
 diff --git a/components/bt/bluedroid/stack/avrc/avrc_utils.c b/components/bt/bluedroid/stack/avrc/avrc_utils.c
-index a8ee2af54..addb1b68e 100644
+index a8ee2af543..addb1b68e5 100644
 --- a/components/bt/bluedroid/stack/avrc/avrc_utils.c
 +++ b/components/bt/bluedroid/stack/avrc/avrc_utils.c
 @@ -58,6 +58,7 @@ BOOLEAN AVRC_IsValidAvcType(UINT8 pdu_id, UINT8 avc_type)
@@ -3325,7 +3309,7 @@ index a8ee2af54..addb1b68e 100644
                  result = TRUE;
              }
 diff --git a/components/bt/bluedroid/stack/include/stack/avrc_api.h b/components/bt/bluedroid/stack/include/stack/avrc_api.h
-index c0c0a5ff3..85e8db1b2 100644
+index c0c0a5ff3f..85e8db1b2e 100644
 --- a/components/bt/bluedroid/stack/include/stack/avrc_api.h
 +++ b/components/bt/bluedroid/stack/include/stack/avrc_api.h
 @@ -590,8 +590,7 @@ extern tAVRC_STS AVRC_ParsCommand (tAVRC_MSG *p_msg, tAVRC_COMMAND *p_result,
@@ -3339,7 +3323,7 @@ index c0c0a5ff3..85e8db1b2 100644
  /*******************************************************************************
  **
 diff --git a/components/bt/bluedroid/stack/include/stack/avrc_defs.h b/components/bt/bluedroid/stack/include/stack/avrc_defs.h
-index 8c56cf532..41d87759c 100644
+index 8c56cf5327..41d87759c3 100644
 --- a/components/bt/bluedroid/stack/include/stack/avrc_defs.h
 +++ b/components/bt/bluedroid/stack/include/stack/avrc_defs.h
 @@ -834,7 +834,7 @@ typedef union {
@@ -3352,7 +3336,7 @@ index 8c56cf532..41d87759c 100644
  #define AVRC_IS_VALID_ATTRIBUTE(a)          (((((a > 0) && a <= AVRC_PLAYER_SETTING_SCAN)) || \
                            (a >= AVRC_PLAYER_SETTING_LOW_MENU_EXT)) ? TRUE : FALSE)
 diff --git a/examples/bluetooth/a2dp_gatts_coex/main/bt_app_av.c b/examples/bluetooth/a2dp_gatts_coex/main/bt_app_av.c
-index 08a08f644..4cd84e36c 100644
+index 08a08f6442..4cd84e36c8 100644
 --- a/examples/bluetooth/a2dp_gatts_coex/main/bt_app_av.c
 +++ b/examples/bluetooth/a2dp_gatts_coex/main/bt_app_av.c
 @@ -25,15 +25,31 @@
@@ -3669,7 +3653,7 @@ index 08a08f644..4cd84e36c 100644
      }
  }
 diff --git a/examples/bluetooth/a2dp_gatts_coex/main/bt_app_av.h b/examples/bluetooth/a2dp_gatts_coex/main/bt_app_av.h
-index 6648eb95e..46342daad 100644
+index 6648eb95e9..46342daadb 100644
 --- a/examples/bluetooth/a2dp_gatts_coex/main/bt_app_av.h
 +++ b/examples/bluetooth/a2dp_gatts_coex/main/bt_app_av.h
 @@ -14,6 +14,8 @@
@@ -3692,7 +3676,7 @@ index 6648eb95e..46342daad 100644
 +
  #endif /* __BT_APP_AV_H__*/
 diff --git a/examples/bluetooth/a2dp_gatts_coex/main/bt_app_core.c b/examples/bluetooth/a2dp_gatts_coex/main/bt_app_core.c
-index 644c5c11f..cd9aa99d5 100644
+index 644c5c11f7..cd9aa99d5f 100644
 --- a/examples/bluetooth/a2dp_gatts_coex/main/bt_app_core.c
 +++ b/examples/bluetooth/a2dp_gatts_coex/main/bt_app_core.c
 @@ -21,14 +21,15 @@ static void bt_app_task_handler(void *arg);
@@ -3769,7 +3753,7 @@ index 644c5c11f..cd9aa99d5 100644
      }
  }
 diff --git a/examples/bluetooth/a2dp_gatts_coex/main/main.c b/examples/bluetooth/a2dp_gatts_coex/main/main.c
-index 367602705..2382cad49 100644
+index 3676027059..2382cad49f 100644
 --- a/examples/bluetooth/a2dp_gatts_coex/main/main.c
 +++ b/examples/bluetooth/a2dp_gatts_coex/main/main.c
 @@ -602,6 +602,39 @@ static void ble_gatts_init(void)
@@ -3948,7 +3932,7 @@ index 367602705..2382cad49 100644
      ble_gatts_init();
  }
 diff --git a/examples/bluetooth/a2dp_sink/main/bt_app_av.c b/examples/bluetooth/a2dp_sink/main/bt_app_av.c
-index 5c12fae46..648e6a37d 100644
+index 5c12fae46a..648e6a37d1 100644
 --- a/examples/bluetooth/a2dp_sink/main/bt_app_av.c
 +++ b/examples/bluetooth/a2dp_sink/main/bt_app_av.c
 @@ -25,15 +25,31 @@
@@ -4216,7 +4200,7 @@ index 5c12fae46..648e6a37d 100644
      }
  }
 diff --git a/examples/bluetooth/a2dp_sink/main/bt_app_av.h b/examples/bluetooth/a2dp_sink/main/bt_app_av.h
-index 6648eb95e..46342daad 100644
+index 6648eb95e9..46342daadb 100644
 --- a/examples/bluetooth/a2dp_sink/main/bt_app_av.h
 +++ b/examples/bluetooth/a2dp_sink/main/bt_app_av.h
 @@ -14,6 +14,8 @@
@@ -4239,7 +4223,7 @@ index 6648eb95e..46342daad 100644
 +
  #endif /* __BT_APP_AV_H__*/
 diff --git a/examples/bluetooth/a2dp_sink/main/bt_app_core.c b/examples/bluetooth/a2dp_sink/main/bt_app_core.c
-index 528b34fc5..cd9aa99d5 100644
+index 528b34fc50..cd9aa99d5f 100644
 --- a/examples/bluetooth/a2dp_sink/main/bt_app_core.c
 +++ b/examples/bluetooth/a2dp_sink/main/bt_app_core.c
 @@ -96,7 +96,7 @@ static void bt_app_task_handler(void *arg)
@@ -4252,7 +4236,7 @@ index 528b34fc5..cd9aa99d5 100644
  }
  
 diff --git a/examples/bluetooth/a2dp_sink/main/main.c b/examples/bluetooth/a2dp_sink/main/main.c
-index 830afe45e..3eb25c931 100644
+index 830afe45e4..3eb25c931b 100644
 --- a/examples/bluetooth/a2dp_sink/main/main.c
 +++ b/examples/bluetooth/a2dp_sink/main/main.c
 @@ -130,6 +130,7 @@ void app_main()

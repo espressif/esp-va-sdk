@@ -1,4 +1,4 @@
-From c1b98589e30f1dac4eb1febdb417fc0cdf0fc5ac Mon Sep 17 00:00:00 2001
+From 053e421f8fa6a946b6555f58580916faaae17636 Mon Sep 17 00:00:00 2001
 From: baohongde <baohongde@espressif.com>
 Date: Wed, 12 Jun 2019 16:32:38 +0800
 Subject: [PATCH 2/2] components/bt: Add AVRCP feature about volume
@@ -6,16 +6,13 @@ Subject: [PATCH 2/2] components/bt: Add AVRCP feature about volume
 ---
  components/bt/bluedroid/api/esp_avrc_api.c    |  58 +++++++--
  .../bluedroid/api/include/api/esp_avrc_api.h  |  45 +++++--
- components/bt/bluedroid/bta/av/bta_av_cfg.c   |  16 ++-
- components/bt/bluedroid/bta/av/bta_av_main.c  |  19 ++-
- .../bt/bluedroid/bta/include/bta/bta_av_api.h |   6 +-
  .../bluedroid/btc/profile/std/avrc/btc_avrc.c |  70 ++++++++++-
  .../btc/profile/std/include/btc_avrc.h        |  12 +-
  examples/bluetooth/a2dp_source/main/main.c    | 116 +++++++++++++++++-
- 8 files changed, 304 insertions(+), 38 deletions(-)
+ 5 files changed, 275 insertions(+), 26 deletions(-)
 
 diff --git a/components/bt/bluedroid/api/esp_avrc_api.c b/components/bt/bluedroid/api/esp_avrc_api.c
-index 9b9e6616c..cbfa71a03 100644
+index 9b9e6616c2..cbfa71a035 100644
 --- a/components/bt/bluedroid/api/esp_avrc_api.c
 +++ b/components/bt/bluedroid/api/esp_avrc_api.c
 @@ -29,7 +29,7 @@ esp_err_t esp_avrc_ct_register_callback(esp_avrc_ct_cb_t callback)
@@ -139,7 +136,7 @@ index 9b9e6616c..cbfa71a03 100644
  
  #endif /* #if BTC_AV_INCLUDED */
 diff --git a/components/bt/bluedroid/api/include/api/esp_avrc_api.h b/components/bt/bluedroid/api/include/api/esp_avrc_api.h
-index 814f2be33..96920c66d 100644
+index 814f2be338..96920c66df 100644
 --- a/components/bt/bluedroid/api/include/api/esp_avrc_api.h
 +++ b/components/bt/bluedroid/api/include/api/esp_avrc_api.h
 @@ -24,6 +24,8 @@
@@ -249,104 +246,8 @@ index 814f2be33..96920c66d 100644
   * @param[in]       event_id: notification event ID that remote AVRCP CT registers
   * @param[in]       rsp: notification response code
   * @param[in]       param: parameters included in the specific notification
-diff --git a/components/bt/bluedroid/bta/av/bta_av_cfg.c b/components/bt/bluedroid/bta/av/bta_av_cfg.c
-index b8a86831c..bc6e078e6 100644
---- a/components/bt/bluedroid/bta/av/bta_av_cfg.c
-+++ b/components/bt/bluedroid/bta/av/bta_av_cfg.c
-@@ -41,7 +41,9 @@ const UINT32  bta_av_meta_caps_co_ids[] = {
- };
- 
- /* AVRCP cupported categories */
--#define BTA_AV_RC_SUPF_CT       (AVRC_SUPF_CT_CAT1)
-+#define BTA_AV_RC_SNK_SUPF_CT       (AVRC_SUPF_CT_CAT1)
-+#define BTA_AV_RC_SRC_SUPF_CT       (AVRC_SUPF_CT_CAT2)
-+
- 
- /* Added to modify
- **  1. flush timeout
-@@ -62,9 +64,11 @@ const UINT16  bta_av_audio_flush_to[] = {
- /* Note: Android doesnt support AVRC_SUPF_TG_GROUP_NAVI  */
- /* Note: if AVRC_SUPF_TG_GROUP_NAVI is set, bta_av_cfg.avrc_group should be TRUE */
- #if AVRC_METADATA_INCLUDED == TRUE
--#define BTA_AV_RC_SUPF_TG       (AVRC_SUPF_TG_CAT2) /* TODO: | AVRC_SUPF_TG_APP_SETTINGS) */
-+#define BTA_AV_RC_SNK_SUPF_TG       (AVRC_SUPF_TG_CAT2) /* TODO: | AVRC_SUPF_TG_APP_SETTINGS) */
-+#define BTA_AV_RC_SRC_SUPF_TG       (AVRC_SUPF_TG_CAT1) /* TODO: | AVRC_SUPF_TG_APP_SETTINGS) */
- #else
--#define BTA_AV_RC_SUPF_TG       (AVRC_SUPF_TG_CAT2)
-+#define BTA_AV_RC_SNK_SUPF_TG       (AVRC_SUPF_TG_CAT2)
-+#define BTA_AV_RC_SRC_SUPF_TG       (AVRC_SUPF_TG_CAT1)
- #endif
- 
- /* the MTU for the AVRCP browsing channel */
-@@ -80,8 +84,10 @@ const tBTA_AV_CFG bta_av_cfg = {
-     48,                     /* AVRCP MTU at L2CAP for control channel */
- #endif
-     BTA_AV_MAX_RC_BR_MTU,   /* AVRCP MTU at L2CAP for browsing channel */
--    BTA_AV_RC_SUPF_CT,      /* AVRCP controller categories */
--    BTA_AV_RC_SUPF_TG,      /* AVRCP target categories */
-+    BTA_AV_RC_SNK_SUPF_CT,  /* AVRCP controller categories as SNK */
-+    BTA_AV_RC_SNK_SUPF_TG,  /* AVRCP target categories as SNK */
-+    BTA_AV_RC_SRC_SUPF_CT,  /* AVRCP controller categories as SRC */
-+    BTA_AV_RC_SRC_SUPF_TG,  /* AVRCP target categories as SRC */
-     672,                    /* AVDTP signaling channel MTU at L2CAP */
-     BTA_AV_MAX_A2DP_MTU,    /* AVDTP audio transport channel MTU at L2CAP */
-     bta_av_audio_flush_to,  /* AVDTP audio transport channel flush timeout */
-diff --git a/components/bt/bluedroid/bta/av/bta_av_main.c b/components/bt/bluedroid/bta/av/bta_av_main.c
-index bc352c8fa..f66936526 100644
---- a/components/bt/bluedroid/bta/av/bta_av_main.c
-+++ b/components/bt/bluedroid/bta/av/bta_av_main.c
-@@ -576,9 +576,13 @@ static void bta_av_api_register(tBTA_AV_DATA *p_data)
-                 bta_ar_reg_avct(p_bta_av_cfg->avrc_mtu, p_bta_av_cfg->avrc_br_mtu,
-                                 (UINT8)(bta_av_cb.sec_mask & (~BTA_SEC_AUTHORIZE)), BTA_ID_AV);
- #endif
--
--                bta_ar_reg_avrc(UUID_SERVCLASS_AV_REM_CTRL_TARGET, "AV Remote Control Target\n", NULL,
--                                p_bta_av_cfg->avrc_tg_cat, BTA_ID_AV);
-+                if (p_data->api_reg.tsep == AVDT_TSEP_SRC) {
-+                    bta_ar_reg_avrc(UUID_SERVCLASS_AV_REM_CTRL_TARGET, "AV Remote Control Target\n", NULL,
-+                                p_bta_av_cfg->avrc_src_tg_cat, BTA_ID_AV);
-+                } else {
-+                    bta_ar_reg_avrc(UUID_SERVCLASS_AV_REM_CTRL_TARGET, "AV Remote Control Target\n", NULL,
-+                                p_bta_av_cfg->avrc_snk_tg_cat, BTA_ID_AV);
-+                }
- #endif
-             }
- 
-@@ -711,8 +715,13 @@ static void bta_av_api_register(tBTA_AV_DATA *p_data)
-                     }
- #if( defined BTA_AR_INCLUDED ) && (BTA_AR_INCLUDED == TRUE)
-                     /* create an SDP record as AVRC CT. */
--                    bta_ar_reg_avrc(UUID_SERVCLASS_AV_REMOTE_CONTROL, NULL, NULL,
--                                    p_bta_av_cfg->avrc_ct_cat, BTA_ID_AV);
-+                    if (p_data->api_reg.tsep == AVDT_TSEP_SRC) {
-+                        bta_ar_reg_avrc(UUID_SERVCLASS_AV_REMOTE_CONTROL, "AV Remote Control Controller\n", NULL,
-+                                    p_bta_av_cfg->avrc_src_ct_cat, BTA_ID_AV);
-+                    } else {
-+                        bta_ar_reg_avrc(UUID_SERVCLASS_AV_REMOTE_CONTROL, "AV Remote Control Controller\n", NULL,
-+                                    p_bta_av_cfg->avrc_snk_ct_cat, BTA_ID_AV);
-+                    }
- #endif
-                 }
-             }
-diff --git a/components/bt/bluedroid/bta/include/bta/bta_av_api.h b/components/bt/bluedroid/bta/include/bta/bta_av_api.h
-index 351c0bc61..5efc2662c 100644
---- a/components/bt/bluedroid/bta/include/bta/bta_av_api.h
-+++ b/components/bt/bluedroid/bta/include/bta/bta_av_api.h
-@@ -529,8 +529,10 @@ typedef struct {
-     UINT32  company_id;         /* AVRCP Company ID */
-     UINT16  avrc_mtu;           /* AVRCP MTU at L2CAP for control channel */
-     UINT16  avrc_br_mtu;        /* AVRCP MTU at L2CAP for browsing channel */
--    UINT16  avrc_ct_cat;        /* AVRCP controller categories */
--    UINT16  avrc_tg_cat;        /* AVRCP target categories */
-+    UINT16  avrc_snk_ct_cat;    /* AVRCP controller categories as SNK */
-+    UINT16  avrc_snk_tg_cat;    /* AVRCP target categories SNK */
-+    UINT16  avrc_src_ct_cat;    /* AVRCP controller categories as SRC */
-+    UINT16  avrc_src_tg_cat;    /* AVRCP target categories as SRC */
-     UINT16  sig_mtu;            /* AVDTP signaling channel MTU at L2CAP */
-     UINT16  audio_mtu;          /* AVDTP audio transport channel MTU at L2CAP */
-     const UINT16 *p_audio_flush_to;/* AVDTP audio transport channel flush timeout */
 diff --git a/components/bt/bluedroid/btc/profile/std/avrc/btc_avrc.c b/components/bt/bluedroid/btc/profile/std/avrc/btc_avrc.c
-index 6e204be48..f86947156 100644
+index c4341b6888..48793be1d5 100644
 --- a/components/bt/bluedroid/btc/profile/std/avrc/btc_avrc.c
 +++ b/components/bt/bluedroid/btc/profile/std/avrc/btc_avrc.c
 @@ -101,7 +101,7 @@ const static uint16_t cs_psth_allowed_cmd[8] = {
@@ -483,7 +384,7 @@ index 6e204be48..f86947156 100644
          BTC_TRACE_WARNING("%s : unhandled event: %d\n", __FUNCTION__, msg->act);
      }
 diff --git a/components/bt/bluedroid/btc/profile/std/include/btc_avrc.h b/components/bt/bluedroid/btc/profile/std/include/btc_avrc.h
-index 7eaabecc1..083522419 100644
+index 7eaabecc17..0835224194 100644
 --- a/components/bt/bluedroid/btc/profile/std/include/btc_avrc.h
 +++ b/components/bt/bluedroid/btc/profile/std/include/btc_avrc.h
 @@ -38,7 +38,8 @@ typedef enum {
@@ -520,7 +421,7 @@ index 7eaabecc1..083522419 100644
  
  /* btc_avrc_tg_act_t */
 diff --git a/examples/bluetooth/a2dp_source/main/main.c b/examples/bluetooth/a2dp_source/main/main.c
-index 174448c10..d1612a2bd 100644
+index 174448c103..d1612a2bd5 100644
 --- a/examples/bluetooth/a2dp_source/main/main.c
 +++ b/examples/bluetooth/a2dp_source/main/main.c
 @@ -27,6 +27,11 @@
