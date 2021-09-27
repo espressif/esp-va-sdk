@@ -1,0 +1,5 @@
+key,type,encoding,value
+device,namespace,,
+client_cert,file,binary,/path/to/esp-alexa/examples/amazon_aia/main/certs/device.crt
+client_key,file,binary,/path/to/esp-alexa/examples/amazon_aia/main/certs/device.key
+server_cert,file,binary,/path/to/esp-alexa/examples/amazon_aia/main/certs/server.crt

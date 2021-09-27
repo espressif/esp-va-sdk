@@ -1,0 +1,8 @@
+#
+# Component Makefile
+#
+
+COMPONENT_ADD_INCLUDEDIRS := include
+
+COMPONENT_SRCDIRS := $(LED_PATTERN_PATH)
+

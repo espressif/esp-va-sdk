@@ -28,13 +28,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include <rom/queue.h>
+#include <sys/queue.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include <audio_stream.h>
 #include <audio_codec.h>
 #include <audio_common.h>
-#include <ringbuf.h>
+#include <basic_rb.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -65,7 +65,7 @@ typedef enum {
 typedef struct audio_pipe_block {
     block_type_t btype;
     void *block_cfg;
-    ringbuf_t *rb;
+    rb_handle_t rb;
     size_t rb_size;
     STAILQ_ENTRY(audio_pipe_block) next;
 } audio_pipe_block_t;

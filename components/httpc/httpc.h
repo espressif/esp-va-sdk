@@ -73,6 +73,8 @@ typedef struct httpc_conn {
         const char *content_type;
         redirect_location_t location; //redirect url when response 301/302/303 etc.
         size_t content_length;
+        size_t byte_count; // Keep track of downloaded data
+        size_t offset; // skip these many bytes of content
         http_parser_settings parser_settings;
         http_parser parser;
         struct parser_state {

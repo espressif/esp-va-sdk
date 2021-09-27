@@ -49,6 +49,15 @@ typedef enum {
     VA_SET_VOLUME_DONE,
 } va_set_volume_t;
 
+enum {
+    VA_UI_CAN_START = (VA_SET_VOLUME_DONE + 1),
+    VA_UI_RESET,
+    VA_UI_OFF,
+    VA_UI_OTA,
+    VA_UI_ERROR,
+};
+
+
 /** Alexa Alert Types
 */
 typedef enum {
@@ -72,6 +81,9 @@ typedef enum {
     /** Corresponding alert is over */
     ALEXA_ALERT_DISABLE,
 } alexa_alert_state_t;
+
+
+void va_app_device_ready();
 
 /** Dialog State callback
  *

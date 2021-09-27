@@ -98,8 +98,6 @@ static esp_err_t parse_http_config(void *base_stream)
         }
     } while (1);
 
-    free(hstream->cfg.url);
-    hstream->cfg.url = NULL;
     return ret;
 }
 
@@ -113,6 +111,77 @@ static void reset_http_config(void *base_stream)
     }
 }
 
+/**
+ * @brief   Create new async connection and set Keepalive
+ */
+static esp_err_t http_connect_async_and_set_keep_alive(http_playback_stream_t *hstream)
+{
+    char *url = hstream->cfg.url;
+    /* Create new connection */
+    esp_tls_cfg_t tls_cfg = {
+        .use_global_ca_store = true,
+    };
+    while (1) {
+        int ret = http_connection_new_async(url, &tls_cfg, &hstream->handle);
+        if (!hstream->base._run || ret == -1) {
+            ESP_LOGE(TAG, "http_connection_new_async failed! _run = %d, ret = %d, line %d", hstream->base._run, ret, __LINE__);
+            return ESP_FAIL;
+        } else if (ret) {
+            break;
+        }
+        /**
+         * First attempt is half way through.
+         * Retry after some time delay to avoid watachdog trigger in case it keeps failing
+         */
+        vTaskDelay(10);
+    };
+    http_connection_set_keepalive_and_recv_timeout(hstream->handle);
+
+    return ESP_OK;
+}
+
+/**
+ * @brief   use this API to refresh existing connection
+ *
+ * @note    When we get error code -0x50 (connection reset by peer),
+ *          call this API to get connection back!
+ */
+ssize_t http_refresh_connection(http_playback_stream_t *hstream)
+{
+    char *url = hstream->cfg.url;
+    ssize_t offset = hstream->handle->request.byte_count;
+
+    ESP_LOGI(TAG, "restarting connection from %d bytes. url %s", offset, url);
+    http_request_delete(hstream->handle);
+    http_connection_delete(hstream->handle);
+    hstream->handle = NULL;
+
+    if (http_connect_async_and_set_keep_alive(hstream) != ESP_OK) {
+        return ESP_FAIL;
+    }
+
+    if(http_request_new(hstream->handle, ESP_HTTP_GET, url) < 0) {
+        http_connection_delete(hstream->handle);
+        hstream->handle = NULL;
+        return ESP_FAIL;
+    }
+
+    hstream->handle->request.offset = offset;
+    if ((http_request_send(hstream->handle, NULL, 0) < 0) ||
+            (http_header_fetch(hstream->handle) < 0)) {
+        ESP_LOGE(TAG, "http_request_send failed line %d", __LINE__);
+        http_request_delete(hstream->handle);
+        http_connection_delete(hstream->handle);
+        hstream->handle = NULL;
+        return ESP_FAIL;
+    }
+    /**
+     * Connection is re-established
+     * Come back for data read
+     */
+    return 0;
+}
+
 static ssize_t http_read(void *s, void *buf, ssize_t len)
 {
     http_playback_stream_t *bstream = (http_playback_stream_t *) s;
@@ -120,15 +189,52 @@ static ssize_t http_read(void *s, void *buf, ssize_t len)
     if (data_read == -EAGAIN) {
         printf("%s: [http_response_recv]: returning EAGAIN\n", TAG);
         return 0;
+    } else if (data_read == -0x50) {
+        /* -0x50. Connection reset by peer! Reconnect the session */
+        return http_refresh_connection(bstream);
     }
-    if (data_read == 0) {
+    while (data_read <= 0) {
+        /* End of data OR error */
         if (bstream->hls_cfg.media_playlist) {
+            if (data_read < 0) {
+                if (!bstream->handle) {
+                    ESP_LOGW(TAG, "Connection was failed! Internet issues? Stopping playback...");
+                    return -1;
+                }
+
+                /**
+                 * If we get an error and we have other segments to be played from playlist.
+                 * We can at least play next segments.
+                 * Create new connection here and try new segment.
+                 */
+                ESP_LOGW(TAG, "Caught error! Trying new segment");
+                http_request_delete(bstream->handle);
+                http_connection_delete(bstream->handle);
+                bstream->handle = NULL;
+                if (ESP_FAIL == http_playback_stream_create_or_renew_session(bstream)) {
+                    return -1; /* Treat failure as end of data anyway. */
+                }
+            }
+            /* Read from next segment from playlist */
             data_read = http_playlist_read_data(bstream, buf, len);
             if (data_read == -EAGAIN) {
-                printf("%s: [http_playlist_read_data]: returning EAGAIN\n", TAG);
+                ESP_LOGI(TAG, "[http_playlist_read_data]: returning EAGAIN");
                 return 0;
+            } else if (data_read == 0) {
+                /**
+                 * Let's just keep this print for now to know if this really was getting hit.
+                 */
+                ESP_LOGW(TAG, "data_read 0 in first attempt of http_playlist_read_data. Stream will be closed!");
+                return -1; /* End of data */
+            } else if (data_read == -0x50) {
+                /* -0x50. Connection reset by peer! Reconnect the session */
+                return http_refresh_connection(bstream);
+            } else if (data_read < 0) {
+                /* We will go into loop again! Hence, trying next segment */
+                ESP_LOGI(TAG, "data_read = %d", data_read);
             }
         } else {
+            /* End of data */
             return -1;
         }
     }
@@ -193,24 +299,9 @@ esp_err_t http_playback_stream_create_or_renew_session(http_playback_stream_t *h
 {
     int ret = 0;
     if (!hstream->handle) {
-        esp_tls_cfg_t tls_cfg = {
-            .use_global_ca_store = true,
-        };
-        while (1) {
-            ret = http_connection_new_async(hstream->cfg.url, &tls_cfg, &hstream->handle);
-            if (!hstream->base._run || ret == -1) {
-                ESP_LOGE(TAG, "http_connection_new_async failed! _run = %d, ret = %d, line %d", hstream->base._run, ret, __LINE__);
-                return ESP_FAIL;
-            } else if (ret) {
-                break;
-            }
-            /**
-             * First attempt is half way through.
-             * Retry after some time to avoid watachdog trigger in case it keeps failing
-             */
-            vTaskDelay(10);
-        };
-        http_connection_set_keepalive_and_recv_timeout(hstream->handle);
+        if (http_connect_async_and_set_keep_alive(hstream) != ESP_OK) {
+            return ESP_FAIL;
+        }
     }
 
     do {
@@ -218,25 +309,9 @@ esp_err_t http_playback_stream_create_or_renew_session(http_playback_stream_t *h
         if (http_connection_new_needed(hstream->handle, hstream->cfg.url)) {
             http_connection_delete(hstream->handle); /* Delete old connection */
             hstream->handle = NULL;
-            /* Create new connection */
-            esp_tls_cfg_t tls_cfg = {
-                .use_global_ca_store = true,
-            };
-            while (1) {
-                ret = http_connection_new_async(hstream->cfg.url, &tls_cfg, &hstream->handle);
-                if (!hstream->base._run || ret == -1) {
-                    ESP_LOGE(TAG, "http_connection_new_async failed! _run = %d, ret = %d, line %d", hstream->base._run, ret, __LINE__);
-                    return ESP_FAIL;
-                } else if (ret) {
-                    break;
-                }
-                /**
-                 * First attempt is half way through.
-                 * Retry after some time delay to avoid watachdog trigger in case it keeps failing
-                 */
-                vTaskDelay(10);
-            };
-            http_connection_set_keepalive_and_recv_timeout(hstream->handle);
+            if (http_connect_async_and_set_keep_alive(hstream) != ESP_OK) {
+                return ESP_FAIL;
+            }
         }
 
         if(http_request_new(hstream->handle, ESP_HTTP_GET, hstream->cfg.url) < 0) {
@@ -259,8 +334,8 @@ esp_err_t http_playback_stream_create_or_renew_session(http_playback_stream_t *h
             hstream->cfg.url = esp_audio_mem_strdup(http_response_get_redirect_location(hstream->handle));
             ESP_LOGI(TAG, "Received status code: %d. Redirecting to: %s", status_code, hstream->cfg.url);
             continue;
-        } else if (status_code != 200) {
-            ESP_LOGE(TAG, "Expected 200 status code, got %d instead", status_code);
+        } else if (status_code != 200 && status_code != 206) {
+            ESP_LOGE(TAG, "Expected 200/206 status code, got %d instead", status_code);
             http_request_delete(hstream->handle);
             http_connection_delete(hstream->handle);
             hstream->handle = NULL;

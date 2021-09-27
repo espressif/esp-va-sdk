@@ -54,6 +54,11 @@
 #define AUDIO_AACP              "audio/aacp"
 #define AUDIO_XAAC              "audio/x-aac"
 #define AUDIO_X_HX_AAC          "audio/x-hx-aac-adts"
+#define AUDIO_WAV               "audio/wav"
+#define AUDIO_XWAV              "audio/x-wav"
+#define AUDIO_AMR               "audio/amr"
+#define AUDIO_AMR_WB            "audio/amr-wb"
+#define AUDIO_3GPP              "audio/3gpp"
 
 static void set_mime_type(http_stream_hls_config_t *hls_cfg, const char *mime_type, char *url)
 {
@@ -88,6 +93,14 @@ static void set_mime_type(http_stream_hls_config_t *hls_cfg, const char *mime_ty
             } else {
                 hls_cfg->mime_type = MP3_URL; /* Try it as MP3 URL anyway */
             }
+        } else if (strncmp(mime_type, AUDIO_WAV, strlen(AUDIO_WAV)) == 0 ||
+                    strncmp(mime_type, AUDIO_XWAV, strlen(AUDIO_XWAV)) == 0) {
+            hls_cfg->mime_type = WAV_URL;
+        } else if (strncmp(mime_type, AUDIO_AMR_WB, strlen(AUDIO_AMR_WB)) == 0 ||
+                    strncmp(mime_type, AUDIO_3GPP, strlen(AUDIO_3GPP)) == 0 ) {
+            hls_cfg->mime_type = AMR_WB_URL;
+        } else if (strncmp(mime_type, AUDIO_AMR, strlen(AUDIO_AMR)) == 0) {
+            hls_cfg->mime_type = AMR_URL;
         }
     }
 }
@@ -106,7 +119,7 @@ http_hls_mime_type_t http_hls_identify_and_init_playlist(http_stream_hls_config_
     switch (hls_cfg->mime_type) {
     case APPLE_URL:
     case MPEG_URL:
-        hls_cfg->variant_playlist = m3u8_parse(base_conn_handle, url, NULL);
+        hls_cfg->variant_playlist = m3u8_parse(base_conn_handle, NULL, url, NULL);
         break;
     case XSCPLS_URL:
         hls_cfg->variant_playlist = pls_parse(base_conn_handle, url);
@@ -156,7 +169,7 @@ http_hls_mime_type_t http_hls_connect_new_variant(void *stream)
     switch (type) {
     case APPLE_URL:
     case MPEG_URL:
-        hls_cfg->media_playlist = m3u8_parse(hstream->handle, hstream->cfg.url, &hstream->cfg.offset_in_ms);
+        hls_cfg->media_playlist = m3u8_parse(hstream->handle, NULL, hstream->cfg.url, &hstream->cfg.offset_in_ms);
         break;
     case XSCPLS_URL:
         hls_cfg->media_playlist = pls_parse(hstream->handle, hstream->cfg.url);
@@ -176,6 +189,7 @@ http_hls_mime_type_t http_hls_connect_new_variant(void *stream)
 
     url = playlist_get_next_entry(hls_cfg->media_playlist);
     if (!url) { /* Playlist is empty */
+        playlist_free(hls_cfg->media_playlist);
         free(hls_cfg->media_playlist);
         hls_cfg->media_playlist = NULL;
         return NO_URL;

@@ -1,0 +1,6 @@
+menu "M5Stack Core2 board specific options"
+
+config HALF_DUPLEX_I2S_MODE
+    bool "Choose Half Duplex I2S mode: Speaker and Mic do not work together on this board."
+    default y
+endmenu

@@ -66,6 +66,14 @@ esp_err_t http_playback_stream_set_config(http_playback_stream_t *stream, http_p
 void http_playback_stream_set_stack_size(http_playback_stream_t *stream, ssize_t stack_size);
 esp_err_t http_playback_stream_create_or_renew_session(http_playback_stream_t *hstream);
 
+/**
+ * @brief   use this API to refresh existing connection
+ *
+ * @note    When we get error code -0x50 (connection reset by peer),
+ *          call this API to get connection back!
+ */
+ssize_t http_refresh_connection(http_playback_stream_t *hstream);
+
 #define HTTP_PLAYBACK_STREAM_BUFFER_SIZE        (512)
 #define HTTP_PLAYBACK_STREAM_TASK_STACK_SIZE    10240
 #define HTTP_PLAYBACK_STREAM_TASK_PRIORITY      4

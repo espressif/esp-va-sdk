@@ -7,10 +7,14 @@
 #include "freertos/semphr.h"
 #include "esp_log.h"
 #include <va_mem_utils.h>
+#include <va_ui.h>
+#include <led_driver.h>
+#include <led_pattern.h>
 #include <va_led.h>
 #include <esp_timer.h>
 
 //#define EN_STACK_MEASUREMENT
+#define BOOTUP_MAX_TIME_SEC 300     /* 5 minutes */
 
 static const char *TAG = "[va_led]";
 
@@ -18,12 +22,12 @@ static int NOTIFICATION_IS_PRESENT = 0;
 static int ALERT_IS_PRESENT = 0;
 static int DND_IS_PRESENT = 0;
 static bool va_led_notif_incoming_is_done = false;
-uint8_t volume_to_set = 0;
 static bool va_led_dnd_st = false;
 static bool va_led_error_st = false;
 static bool va_led_alert_short_en = false;
 static bool init_done;
 static uint8_t counter = 0;
+static uint64_t bootup_start_time = 0;
 
 typedef struct {
     TaskHandle_t va_led_task_handle;
@@ -39,6 +43,26 @@ typedef struct {
     bool va_led_priority_status;
 } va_led_priority_t;
 static va_led_priority_t va_led_priority[4];    //Mute, Unmute, Vol, all other states
+
+static void va_led_bootup_start()
+{
+    bootup_start_time = esp_timer_get_time() / (1000 * 1000);
+}
+
+static void va_led_bootup_expired()
+{
+    va_ui_set_state(VA_IDLE);
+}
+
+static bool va_led_bootup_check_time_expiry()
+{
+    uint64_t current_time = esp_timer_get_time() / (1000 * 1000);
+    bool ret = (current_time - bootup_start_time) > BOOTUP_MAX_TIME_SEC;
+    if (ret == true) {
+        va_led_bootup_expired();
+    }
+    return ret;
+}
 
 void va_led_delay_timer_cb()
 {
@@ -70,9 +94,9 @@ IRAM_ATTR esp_err_t va_led_set(int va_state)
         va_led_priority[3].va_led_priority_status = false; //When in volume condition, turn off other states
     } else if (va_state == VA_SET_VOLUME_DONE) {
         va_led_priority[3].va_led_priority_status = true;
-    } else if (va_state == VA_LED_ERROR) {
+    } else if (va_state == VA_UI_ERROR) {
         va_led_error_st = true;
-    } else if (va_state == VA_LED_ALERT_SHORT) {
+    } else if (va_state == LED_PATTERN_ALERT_SHORT) {
         counter = 0;
         va_led_alert_short_en = true;
     } else {
@@ -90,17 +114,17 @@ IRAM_ATTR esp_err_t va_led_set(int va_state)
     return ESP_OK;
 }
 
-static void va_led_send_vl(va_led_specs_t *va_led_v, uint8_t num)
+static void va_led_send_vl(led_pattern_state_t *va_led_v, uint8_t num)
 {
     xSemaphoreTake(led_st.va_led_tim_sema, portMAX_DELAY);
-    va_led_set_pwm((uint32_t *)va_led_v[num].va_led_val);
-    esp_timer_start_once(led_st.esp_delay_timer_hdl, (va_led_v[num].va_led_delay * 1000));
+    led_driver_set_value((uint32_t *)va_led_v[num].led_state_val);
+    esp_timer_start_once(led_st.esp_delay_timer_hdl, (va_led_v[num].led_state_delay * 1000));
 }
 
-static void va_led_set_state(size_t sz, const va_led_specs_t *va_led_conf)
+static void va_led_set_state(size_t sz, const led_pattern_state_t *va_led_conf)
 {
     for(int i = 0; i < sz; i++) {
-        va_led_send_vl((va_led_specs_t *)va_led_conf, i);
+        va_led_send_vl((led_pattern_state_t *)va_led_conf, i);
     }
 }
 
@@ -109,28 +133,21 @@ static void va_led_task(void *arg)
     bool va_led_is_mute = false;
     bool va_led_listen_on_going = false;
     bool va_led_listening_end_flag = false;
-    va_led_config_t *va_led_con = (va_led_config_t *)arg;
+    led_pattern_config_t *va_led_con = (led_pattern_config_t *)arg;
     TickType_t va_led_tick = portMAX_DELAY;
     while (1) {
         vTaskDelay(1);      // Temporary fix for ui-led-thread spinning
         xSemaphoreTake(led_st.va_led_patttern_sema, va_led_tick);
         //Handle Mute
         if (va_led_priority[0].va_led_priority_status) {
-            if (!(va_led_con[VA_LED_MIC_OFF_START].va_led_state_st->loop_en)) {
-              va_led_set_state(va_led_con[VA_LED_MIC_OFF_START].va_led_state_sz, va_led_con[VA_LED_MIC_OFF_START].va_led_state_st);
-            }
-            if (!(va_led_con[VA_LED_MIC_OFF_ON].va_led_state_st->loop_en)) {
-                va_led_set_state(va_led_con[VA_LED_MIC_OFF_ON].va_led_state_sz, va_led_con[VA_LED_MIC_OFF_ON].va_led_state_st);
-            }
+            va_led_set_state(va_led_con[LED_PATTERN_MIC_OFF_ENTER].led_states_count, va_led_con[LED_PATTERN_MIC_OFF_ENTER].led_states);
             va_led_is_mute = true;
             va_led_priority[0].va_led_priority_status = false;
             va_led_tick = portMAX_DELAY;
         }
         //Handle Un-mute
         if (va_led_priority[1].va_led_priority_status) {
-            if (!(va_led_con[VA_LED_MIC_OFF_END].va_led_state_st->loop_en)) {
-                va_led_set_state(va_led_con[VA_LED_MIC_OFF_END].va_led_state_sz, va_led_con[VA_LED_MIC_OFF_END].va_led_state_st);
-            }
+            va_led_set_state(va_led_con[LED_PATTERN_MIC_OFF_EXIT].led_states_count, va_led_con[LED_PATTERN_MIC_OFF_EXIT].led_states);
             va_led_is_mute = false;
             va_led_priority[1].va_led_priority_status = false;
             va_led_tick = portMAX_DELAY;
@@ -139,14 +156,14 @@ static void va_led_task(void *arg)
         if (va_led_priority[2].va_led_priority_status) {
             if(volume_to_set == 0 || va_led_priority[2].va_led_current_state == VA_SPEAKER_MUTE_ENABLE) {
                 for(int i = 0; i < 3; i++) {
-                    va_led_set_state(va_led_con[VA_LED_SPEAKER_MUTE].va_led_state_sz, va_led_con[VA_LED_SPEAKER_MUTE].va_led_state_st);
+                    va_led_set_state(va_led_con[LED_PATTERN_SPEAKER_MUTE].led_states_count, va_led_con[LED_PATTERN_SPEAKER_MUTE].led_states);
                 }
             } else {
                 uint8_t vol = volume_to_set / 5;
                 if (vol <= 0) {
                     vol = 1;
                 }
-                va_led_send_vl(va_led_con[VA_LED_SPEAKER_VOL].va_led_state_st, vol - 1);
+                va_led_send_vl(va_led_con[LED_PATTERN_SPEAKER_VOL].led_states, vol - 1);
                 vTaskDelay(178 / portTICK_RATE_MS); //Need to figue out this delay
             }
             va_led_priority[2].va_led_priority_status = false;
@@ -154,68 +171,68 @@ static void va_led_task(void *arg)
         //Handle all other led states
         if (va_led_priority[3].va_led_priority_status) {
             switch (va_led_priority[3].va_led_current_state) {
-                case VA_CAN_START :
-                    if (!(va_led_con[VA_LED_BOOTUP_1].va_led_state_st->loop_en)) {
-                        va_led_set_state(va_led_con[VA_LED_BOOTUP_1].va_led_state_sz, va_led_con[VA_LED_BOOTUP_1].va_led_state_st);  //bootup 1
-                    }
-                    while (!(va_boot_is_finish()) && !(va_led_priority[3].va_led_current_state == LED_OFF)) {
-                        va_led_send_vl(va_led_con[VA_LED_BOOTUP_2].va_led_state_st, counter);
-                        counter = (counter + 1) % va_led_con[VA_LED_BOOTUP_2].va_led_state_sz;
+                case VA_UI_CAN_START :
+                    va_led_bootup_start();
+                    va_led_set_state(va_led_con[LED_PATTERN_BOOTUP_1].led_states_count, va_led_con[LED_PATTERN_BOOTUP_1].led_states);  //bootup 1
+                    /* Stop when LEDs are turned off OR there is an error OR bootup time has expired */
+                    while (va_led_priority[3].va_led_current_state != VA_UI_OFF && va_led_error_st != true && va_led_bootup_check_time_expiry() == false) {
+                        va_led_send_vl(va_led_con[LED_PATTERN_BOOTUP_2].led_states, counter);
+                        counter = (counter + 1) % va_led_con[LED_PATTERN_BOOTUP_2].led_states_count;
                     }
                     va_led_tick = portMAX_DELAY;
                 break;
                 case VA_IDLE :
                     if(va_led_listening_end_flag && (va_led_priority[3].va_led_current_state == VA_IDLE)) {
-                        va_led_set_state(va_led_con[VA_LED_WW_DEACTIVATE].va_led_state_sz, va_led_con[VA_LED_WW_DEACTIVATE].va_led_state_st);
+                        va_led_set_state(va_led_con[LED_PATTERN_LISTENING_EXIT].led_states_count, va_led_con[LED_PATTERN_LISTENING_EXIT].led_states);
                         va_led_listening_end_flag = false;
                         va_led_listen_on_going = false;
                     }
                     if (va_led_dnd_st) {
-                        va_led_set_state(va_led_con[VA_LED_DND].va_led_state_sz, va_led_con[VA_LED_DND].va_led_state_st);
+                        va_led_set_state(va_led_con[LED_PATTERN_DO_NOT_DISTURB].led_states_count, va_led_con[LED_PATTERN_DO_NOT_DISTURB].led_states);
                         va_led_dnd_st = false;
                     }
                     if (va_led_error_st) {
-                        va_led_set_state(va_led_con[VA_LED_ERROR].va_led_state_sz, va_led_con[VA_LED_ERROR].va_led_state_st);
+                        va_led_set_state(va_led_con[LED_PATTERN_ERROR].led_states_count, va_led_con[LED_PATTERN_ERROR].led_states);
                         va_led_error_st = false;
                     }
                     if (NOTIFICATION_IS_PRESENT && (!(ALERT_IS_PRESENT > 0) || va_led_notif_incoming_is_done == true)) {
                         if(va_led_notif_incoming_is_done) {
-                            va_led_set_state(va_led_con[VA_LED_NTF_INCOMING].va_led_state_sz, va_led_con[VA_LED_NTF_INCOMING].va_led_state_st);
+                            va_led_set_state(va_led_con[LED_PATTERN_NOTIFICATION_NEW].led_states_count, va_led_con[LED_PATTERN_NOTIFICATION_NEW].led_states);
                             va_led_notif_incoming_is_done = false;
                         }
                         if (!(ALERT_IS_PRESENT > 0)) {
-                            va_led_send_vl(va_led_con[VA_LED_NTF_QUEUED].va_led_state_st, counter);
-                            counter = (counter + 1) % va_led_con[VA_LED_NTF_QUEUED].va_led_state_sz;
+                            va_led_send_vl(va_led_con[LED_PATTERN_NOTIFICATION_ONGOING].led_states, counter);
+                            counter = (counter + 1) % va_led_con[LED_PATTERN_NOTIFICATION_ONGOING].led_states_count;
                             va_led_tick = 0;
                         }
                     } else if (ALERT_IS_PRESENT > 0) {
-                        va_led_send_vl(va_led_con[VA_LED_ALERT].va_led_state_st, counter);
-                        counter = (counter + 1) % va_led_con[VA_LED_ALERT].va_led_state_sz;
+                        va_led_send_vl(va_led_con[LED_PATTERN_ALERT].led_states, counter);
+                        counter = (counter + 1) % va_led_con[LED_PATTERN_ALERT].led_states_count;
                         va_led_tick = 0;
                     } else if(va_led_is_mute) {
-                        va_led_send_vl(va_led_con[VA_LED_MIC_OFF_ON].va_led_state_st, (va_led_con[VA_LED_MIC_OFF_ON].va_led_state_sz -1));
+                        va_led_set_state(va_led_con[LED_PATTERN_MIC_OFF_ONGOING].led_states_count, va_led_con[LED_PATTERN_MIC_OFF_ONGOING].led_states);
                         va_led_tick = portMAX_DELAY;
                         break;
                     } else {
-                        va_led_set_state(va_led_con[VA_LED_OFF].va_led_state_sz, va_led_con[VA_LED_OFF].va_led_state_st);  //LED off
+                        va_led_set_state(va_led_con[LED_PATTERN_OFF].led_states_count, va_led_con[LED_PATTERN_OFF].led_states);  //LED off
                         va_led_tick = portMAX_DELAY;
                     }
                 break;
                 case VA_LISTENING :
                     va_led_listening_end_flag = true;
-                    if (va_led_listen_on_going == false && !(va_led_con[VA_LED_WW_ACTIVE].va_led_state_st->loop_en)) {
-                        va_led_set_state(va_led_con[VA_LED_WW_ACTIVE].va_led_state_sz, va_led_con[VA_LED_WW_ACTIVE].va_led_state_st);
+                    if (va_led_listen_on_going == false) {
+                        va_led_set_state(va_led_con[LED_PATTERN_LISTENING_ENTER].led_states_count, va_led_con[LED_PATTERN_LISTENING_ENTER].led_states);
                         va_led_listen_on_going = true;
                         va_led_alert_short_en = false;
                     }
                     if (va_led_alert_short_en) {
-                        va_led_send_vl(va_led_con[VA_LED_ALERT_SHORT].va_led_state_st, counter);
-                        if ((counter = (counter + 1) % va_led_con[VA_LED_ALERT_SHORT].va_led_state_sz) == 0) {
+                        va_led_send_vl(va_led_con[LED_PATTERN_ALERT_SHORT].led_states, counter);
+                        if ((counter = (counter + 1) % va_led_con[LED_PATTERN_ALERT_SHORT].led_states_count) == 0) {
                             va_led_alert_short_en = false;
                         }
                         va_led_tick = 0;
                     } else {
-                        va_led_send_vl(va_led_con[VA_LED_WW_ONGOING].va_led_state_st, 0);
+                        va_led_set_state(va_led_con[LED_PATTERN_LISTENING_ONGOING].led_states_count, va_led_con[LED_PATTERN_LISTENING_ONGOING].led_states);
                         va_led_tick = portMAX_DELAY;
                     }
                 break;
@@ -223,13 +240,13 @@ static void va_led_task(void *arg)
                     va_led_listening_end_flag = true;
                     va_led_listen_on_going = false;
                     if (va_led_alert_short_en) {
-                        va_led_send_vl(va_led_con[VA_LED_ALERT_SHORT].va_led_state_st, counter);
-                        if ((counter = (counter + 1) % va_led_con[VA_LED_ALERT_SHORT].va_led_state_sz) == 0) {
+                        va_led_send_vl(va_led_con[LED_PATTERN_ALERT_SHORT].led_states, counter);
+                        if ((counter = (counter + 1) % va_led_con[LED_PATTERN_ALERT_SHORT].led_states_count) == 0) {
                             va_led_alert_short_en = false;
                         }
                     } else {
-                        va_led_send_vl(va_led_con[VA_LED_THINKING].va_led_state_st, counter);
-                        counter = (counter + 1) % va_led_con[VA_LED_THINKING].va_led_state_sz;
+                        va_led_send_vl(va_led_con[LED_PATTERN_THINKING].led_states, counter);
+                        counter = (counter + 1) % va_led_con[LED_PATTERN_THINKING].led_states_count;
                     }
                     va_led_tick = 0;
                 break;
@@ -237,32 +254,30 @@ static void va_led_task(void *arg)
                     va_led_listening_end_flag = true;
                     va_led_listen_on_going = false;
                     if (va_led_alert_short_en) {
-                        va_led_send_vl(va_led_con[VA_LED_ALERT_SHORT].va_led_state_st, counter);
-                        if ((counter = (counter + 1) % va_led_con[VA_LED_ALERT_SHORT].va_led_state_sz) == 0) {
+                        va_led_send_vl(va_led_con[LED_PATTERN_ALERT_SHORT].led_states, counter);
+                        if ((counter = (counter + 1) % va_led_con[LED_PATTERN_ALERT_SHORT].led_states_count) == 0) {
                             va_led_alert_short_en = false;
                         }
                     } else {
-                        va_led_send_vl(va_led_con[VA_LED_SPEAKING].va_led_state_st, counter);
-                        counter = (counter + 1) % va_led_con[VA_LED_SPEAKING].va_led_state_sz;
+                        va_led_send_vl(va_led_con[LED_PATTERN_SPEAKING].led_states, counter);
+                        counter = (counter + 1) % va_led_con[LED_PATTERN_SPEAKING].led_states_count;
                     }
                     va_led_tick = 0;
                     if (DND_IS_PRESENT) {
                         va_led_dnd_st = true;
                     }
                     break;
-                case LED_RESET :
-                    va_led_send_vl(va_led_con[VA_LED_FACTORY_RESET].va_led_state_st, counter);
-                    counter = (counter + 1) % va_led_con[VA_LED_FACTORY_RESET].va_led_state_sz;
+                case VA_UI_RESET :
+                    va_led_send_vl(va_led_con[LED_PATTERN_SETUP].led_states, counter);
+                    counter = (counter + 1) % va_led_con[LED_PATTERN_SETUP].led_states_count;
                     va_led_tick = 0;
                 break;
-                case LED_OTA :
-                    va_led_set_state(va_led_con[VA_LED_OTA].va_led_state_sz, va_led_con[VA_LED_OTA].va_led_state_st);  //led off
+                case VA_UI_OTA :
+                    va_led_set_state(va_led_con[LED_PATTERN_OTA].led_states_count, va_led_con[LED_PATTERN_OTA].led_states);  //led off
                     va_led_tick = portMAX_DELAY;
                 break;
-                case LED_OFF :
-                    if (!(va_led_con[VA_LED_OFF].va_led_state_st->loop_en)) {
-                        va_led_set_state(va_led_con[VA_LED_OFF].va_led_state_sz, va_led_con[VA_LED_OFF].va_led_state_st);  //led off
-                    }
+                case VA_UI_OFF :
+                    va_led_set_state(va_led_con[LED_PATTERN_OFF].led_states_count, va_led_con[LED_PATTERN_OFF].led_states);  //led off
                     va_led_tick = portMAX_DELAY;
                 break;
                 default :
@@ -309,8 +324,14 @@ void va_led_set_dnd(bool dnd_state)
     DND_IS_PRESENT = dnd_state;
 }
 
-esp_err_t va_led_init(va_led_config_t va_led_conf[VA_LED_PATTERN_MAX])
+esp_err_t va_led_init()
 {
+    if (led_driver_is_init_done() == false || led_pattern_is_init_done() == false) {
+        ESP_LOGE(TAG, "LED driver/LED pattern has not been initialized yet. Make sure that is initialized before calling va_led_init()");
+        return ESP_FAIL;
+    }
+    led_pattern_config_t *va_led_conf = NULL;
+    led_pattern_get_config(&va_led_conf);
 
     static StaticTask_t va_led_buf;
     init_done = true;
@@ -351,5 +372,13 @@ esp_err_t va_led_init(va_led_config_t va_led_conf[VA_LED_PATTERN_MAX])
         ESP_LOGE(TAG, "Could not create ui led task");
         return ESP_FAIL;
     }
+
+    va_ui_config_t ui_config = {
+        .set_state_cb = va_led_set,
+        .set_alert_cb = va_led_set_alert,
+        .set_dnd_cb = va_led_set_dnd,
+    };
+    va_ui_init(&ui_config);
+
     return ESP_OK;
 }

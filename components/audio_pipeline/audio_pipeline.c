@@ -111,7 +111,7 @@ static audio_pipe_t *audio_pipe_alloc(const char *name)
     return p;
 }
 
-static void _create_insert_block(audio_pipe_t *p, void *cfg, block_type_t type, ringbuf_t *rb, size_t rb_size, bool head)
+static void _create_insert_block(audio_pipe_t *p, void *cfg, block_type_t type, rb_handle_t rb, size_t rb_size, bool head)
 {
     audio_pipe_block_t *b = calloc(1, sizeof(audio_pipe_block_t));
     assert(b);
@@ -361,23 +361,23 @@ esp_err_t audio_pipe_stop(audio_pipe_t *p)
 
 static ssize_t rb_read_cb(void *h, void *data, int len, uint32_t wait)
 {
-    return rb_read((ringbuf_t *) h, data, len, wait);
+    return rb_read((rb_handle_t) h, data, len, wait);
 }
 
 static ssize_t rb_write_cb(void *h, void *data, int len, uint32_t wait)
 {
     if (len <= 0) {
-        rb_signal_writer_finished((ringbuf_t *) h);
+        rb_signal_writer_finished((rb_handle_t) h);
         return len;
     }
-    return rb_write((ringbuf_t *) h, data, len, wait);
+    return rb_write((rb_handle_t) h, data, len, wait);
 }
 
 audio_pipe_t *_audio_pipe_create(const char *name, audio_stream_t *istream, size_t rb1_size,
                                  audio_io_fn_arg_t *io_cb, audio_codec_t *codec, size_t rb2_size,
                                  audio_stream_t *ostream)
 {
-    ringbuf_t *rb1 = NULL, *rb2 = NULL;
+    rb_handle_t rb1 = NULL, rb2 = NULL;
     audio_io_fn_arg_t stream_io;
     audio_io_fn_arg_t codec_input, codec_output;
 

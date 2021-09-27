@@ -2,9 +2,15 @@ menu "Voice Assistant Configurations"
 
 config ALEXA_PRODUCT_ID
     string "Device Product ID"
-    default "esp_avs_open"
+    default "esp_alexa_open"
     help
         Product ID that will be used by the device to connect with AVS.
+
+config VOICE_ASSISTANT_POP
+    string "Device's proof-of-possession key"
+    default "abcd1234"
+    help
+        Proof-of-possession is used for encrypted communication. Companion app uses default key for symmetric encryption and decryption of messages. If you change the key in the firmware, please modify the app too.
 
 config ALEXA_REMOVE_SHORT_ALERT_SUPPORT
     bool "Remove the support for short alerts"
@@ -19,29 +25,10 @@ config VOICE_ASSISTANT_TASK_LIST
     help
         Prints all the tasks which are running as well as blocked.
 
-config ALEXA_ENABLE_OTA
-    bool "Enable OTA support"
+config ALEXA_ENABLE_CLOUD
+    bool "Enable cloud support"
     default n
     help
-        Enables OTA support with cloud agent.
-
-config ALEXA_ENABLE_LOCAL_PLAYER
-    bool "Enable Local Player"
-    default n
-    help
-        Enables the local player. The audio file can be passed to this which internally passes it to the audio_player.
-
-config ALEXA_ENABLE_EQUALIZER
-    bool "Enable Equalizer"
-    default n
-    help
-        Enables the equalizer. The application can then modify the output according to the values of the equalizer.
-
-config ALEXA_ENABLE_AWS_IOT
-    bool "Enable AWS-Iot"
-    default n
-    depends on AWS_IOT_SDK
-    help
-        Enables the AWS-IoT additional component. The wake-word count can be seen on the AWS-IoT console
+        Enables app_cloud.h APIs for linking with a cloud for command and control. Default implementation of ESP RainMaker is available, and can be modified to any other such cloud.
 
 endmenu

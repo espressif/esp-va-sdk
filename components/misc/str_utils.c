@@ -102,7 +102,3 @@ void estr_delete(estr_t *estr)
     va_mem_free(estr);
 }
 
-char *estr_get_buf_ptr(estr_t *estr)
-{
-    return estr->buf;
-}

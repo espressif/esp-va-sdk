@@ -61,5 +61,6 @@ int auth_delegate_init(auth_delegate_signin_handler_t signin_handler, auth_deleg
 int auth_delegate_sign_in(const char *oauth_url, auth_delegate_config_t *cfg);
 void auth_delegate_sign_out();
 int auth_delegate_get_token(char *buf, int size);
+const char *auth_delegate_get_client_id();
 
 #endif /* _AUTH_DELEGATE_H_ */

@@ -30,7 +30,7 @@ extern "C" {
  *
  * @return A uuid as a string.
  */
-const char *generateUUID();
+char *generateUUID();
 
 /* ASCII UUID length including one for the terminating null character */
 #define UUID_MAX_LEN 37

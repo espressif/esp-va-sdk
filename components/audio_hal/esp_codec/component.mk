@@ -1,0 +1,7 @@
+#
+# Component Makefile
+#
+
+COMPONENT_ADD_INCLUDEDIRS := $(ESP_CODEC_PATH) include
+
+COMPONENT_SRCDIRS := $(ESP_CODEC_PATH)

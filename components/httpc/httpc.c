@@ -102,7 +102,7 @@ static int http_response_read_and_parse(httpc_conn_t *httpc, char *buf, size_t b
             /* Currently this is only supported if the timeout is set AFTER the headers are already parsed */
             return -EAGAIN;
         }
-        return -1;
+        return data_read;
     }
     /* Feed the parser */
     int parsed = http_parser_execute(&httpc->request.parser, &httpc->request.parser_settings,
@@ -115,7 +115,7 @@ static int http_response_read_and_parse(httpc_conn_t *httpc, char *buf, size_t b
          * We should blindly return -1 from here to able to break the `http_response_recv` loop!?
          * This is unlikely to hit but this is the prime suspect for random `http_reader` WDT triggers.
          */
-        ESP_LOGE(TAG, "Peer connection closed...data incomplete");
+        ESP_LOGE(TAG, "data_read 0 sent to http_parser_execute and parser didn't set ESP_HTTP_RESP_BDY_RECEIVED! Current status is = %d", httpc->state);
         return -1;
     }
     return 0;
@@ -334,16 +334,24 @@ static int http_request_send_our_hdr(httpc_conn_t *httpc, size_t data_len)
 #define GET_DATA_TEMPLATE               \
 "GET %s HTTP/1.1\r\n"                   \
 "User-Agent: ESP32 HTTP Client/1.0\r\n" \
-"Host: %s\r\n\r\n"                      \
+"Host: %s\r\n"                          \
+"Range: bytes=%s-\r\n"                  \
+"\r\n"                                  \
+
+#define INT_TO_CHAR_SIZE 12 // Enough to store signed 32 bit number + `\0`
+        char range_str[INT_TO_CHAR_SIZE] = {0, };
+        snprintf(range_str, INT_TO_CHAR_SIZE, "%d", httpc->request.offset);
+#undef INT_TO_CHAR_SIZE
 
         int hdr_len = strlen(GET_DATA_TEMPLATE) + strlen(httpc->request.url) +
-                      strlen(httpc->host) + 1;
+                      strlen(httpc->host) + strlen(range_str) + 1;
+
         hdr = (char *)calloc(1, hdr_len);
         if (!hdr) {
             return -1;
         }
         snprintf(hdr, hdr_len, GET_DATA_TEMPLATE, httpc->request.url,
-                 httpc->host);
+                 httpc->host, range_str);
     }
     break;
     case ESP_HTTP_PUT:
@@ -435,7 +443,6 @@ static void process_hdr_value_pair(httpc_conn_t *httpc)
 static int http_get_hdr_field(http_parser *parser, const char *p, size_t len)
 {
     httpc_conn_t *h = parser->data;
-
     if (!h->request.parser_state.last_was_hdr) {
         /* This is a new header. First process any value from the previous
          * header-value pair
@@ -534,6 +541,8 @@ static int http_hdr_complete(http_parser *parser)
 
     h->state = ESP_HTTP_RESP_HDR_RECEIVED;
     h->request.content_length = h->request.parser.content_length;
+    h->request.byte_count = h->request.offset;
+    h->request.offset = 0; // Next request shall start from `0`
     ESP_LOGD(TAG, "on-hdr-complete: resp_code %d  resp_len %zu\n",
              http_response_get_code(h),
              http_response_get_content_len(h));
@@ -693,6 +702,7 @@ int http_response_recv(httpc_conn_t *httpc, char *buf, size_t buf_len)
         } else {
             httpc->request.hdr_overflow_buf_index += copy_len;
         }
+        httpc->request.byte_count += copy_len;
         return copy_len;
     }
     while (1) {
@@ -702,6 +712,7 @@ int http_response_recv(httpc_conn_t *httpc, char *buf, size_t buf_len)
                 return status;
             }
             if (httpc->request.out_buf_index) {
+                httpc->request.byte_count += httpc->request.out_buf_index;
                 return httpc->request.out_buf_index;
             } else {
                 /* We tried to read data, but mostly read meta-data

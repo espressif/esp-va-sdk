@@ -1,0 +1,40 @@
+menu "Voice Assistant Configurations"
+
+config ALEXA_PRODUCT_ID
+    string "Device Product ID"
+    default "esp_alexa_open"
+    help
+        Product ID that will be used by the device to connect with AVS.
+
+config VOICE_ASSISTANT_POP
+    string "Device's proof-of-possession key"
+    default "abcd1234"
+    help
+        Proof-of-possession is used for encrypted communication. Companion app uses default key for symmetric encryption and decryption of messages. If you change the key in the firmware, please modify the app too.
+
+config VOICE_ASSISTANT_TASK_LIST
+    bool "Enable task list print at delete stream"
+    default n
+    depends on FREERTOS_USE_STATS_FORMATTING_FUNCTIONS
+    help
+        Prints all the tasks which are running as well as blocked.
+
+config ALEXA_AWS_ACCOUNT_ID
+    string "AWS Account ID"
+    default "XXX"
+    help
+        AWS Account ID for which AIS is white-listed.
+
+config ALEXA_AWS_ENDPOINT
+    string "AWS Endpoint"
+    default "XXX"
+    help
+        AWS Endpoint to which the device should connect.
+
+config ALEXA_ENABLE_CLOUD
+    bool "Enable cloud support"
+    default n
+    help
+        Enables app_cloud.h APIs for linking with a cloud for command and control. Default implementation of ESP RainMaker is available, and can be modified to any other such cloud.
+
+endmenu

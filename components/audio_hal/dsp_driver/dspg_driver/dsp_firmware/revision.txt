@@ -1,0 +1,18 @@
+#### Revision log
+
+D2 firmware 
+-> Mango_D2_ver_461_ASRP3_3750_RC4.bin 
+
+D4p firmware
+-> Mango_D8x_ver_4611_RC1_OKG_190812_AmzVT_230.bin
+
+Amazon Acoustic Model
+-> p_WR_250k.en-US.alexa
+
+
+3-MIC, 1-SPK ASRP parameter
+-> AsrpParams_Mango_Aec_3Mic_1Spk_v375x_T33_P15.bin
+
+2-MIC, 1-SPK ASRP parameter
+-> AsrpParams_Mango_Aec_2Mic_1Spk_v375x_T33_P15.bin
+

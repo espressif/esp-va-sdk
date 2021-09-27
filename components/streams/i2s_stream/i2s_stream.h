@@ -59,7 +59,7 @@ void i2s_stream_set_stack_size(i2s_stream_t *stream, ssize_t stack_size);
 void i2s_stream_writer_disable(i2s_stream_t *stream);
 void i2s_stream_writer_enable(i2s_stream_t *stream);
 
-#define I2S_STREAM_BUFFER_SIZE        (512)
+#define I2S_STREAM_BUFFER_SIZE        (1280)
 #define I2S_STREAM_TASK_STACK_SIZE    2200
 #define I2S_STREAM_TASK_PRIORITY     5
 

@@ -276,4 +276,12 @@ int sh2lib_do_putpost_with_nv(struct sh2lib_handle *hd, const nghttp2_nv *nva, s
  * @param[in] stream_id Stream ID on which to resume sending the data
  */
 int sh2lib_resume_deferred_data(struct sh2lib_handle *hd, int32_t stream_id);
+
+/**
+ * @brief Sets packet priority to Voice access category
+ *
+ * Note this can only be used with AMPDU disabled.
+ *
+ */
+int sh2lib_set_qos_vo(struct sh2lib_handle *hd);
 #endif /* ! __ESP_EXAMPLE_SH2_LIB_H_ */

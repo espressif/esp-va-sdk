@@ -92,7 +92,7 @@ in good condition with no obvious signs of damage.
 
 ### 1.4.3 Software Setup
 
-While this board can be used for variety of applications, one of the primary applications is to support "Alexa Voice Service (AVS) for AWS IoT" use cases. You can download Espressif's [AVS for AWS IoT SDK](https://github.com/espressif/esp-va-sdk/tree/feature/aia-beta) and follow the [instructions](https://github.com/espressif/esp-va-sdk/blob/feature/aia-beta/README.md).
+While this board can be used for variety of applications, one of the primary applications is to support "Alexa Voice Service (AVS) for AWS IoT" use cases. You can download Espressif's [AVS for AWS IoT SDK](https://github.com/espressif/esp-va-sdk/) and follow the [instructions](https://github.com/espressif/esp-va-sdk/blob/master/README.md).
 
 # 2. Hardware Reference
 

@@ -40,7 +40,6 @@ estr_t *estr_new(size_t size, size_t realloc_block_size);
 void estr_delete(estr_t *estr);
 int estr_append(estr_t *estr, const char *str, ...);
 void blob_create_or_append(char **current_data, size_t current_len, const char *data, int size);
-char *estr_get_buf_ptr(estr_t *estr);
 static inline void str_create_or_append(char **current_data, const char *data, int size)
 {
     size_t current_len = 0;
@@ -48,6 +47,11 @@ static inline void str_create_or_append(char **current_data, const char *data, i
         current_len = strlen(*current_data);
     }
     return blob_create_or_append(current_data, current_len, data, size);
+}
+
+static inline char *estr_get_buf_ptr(estr_t *estr)
+{
+    return estr->buf;
 }
 
 #endif /* _STR_UTILS_H_ */

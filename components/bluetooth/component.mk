@@ -1,0 +1,12 @@
+#
+# Component Makefile
+#
+
+ifdef CONFIG_BT_ENABLED
+ifndef CONFIG_BTDM_CONTROLLER_MODE_BLE_ONLY
+
+COMPONENT_ADD_INCLUDEDIRS := include
+COMPONENT_SRCDIRS := src
+
+endif
+endif

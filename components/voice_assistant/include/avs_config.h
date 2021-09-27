@@ -4,16 +4,16 @@
 #ifndef _AVS_CONFIG_H_
 #define _AVS_CONFIG_H_
 
-#include <conn_mgr_prov.h>
-
-/** Callback event for provisioning AVS configuration
+/** Alexa Provisioning Init
  *
- * This api can be set as the event_cb in conn_mgr_prov_t while starting provisioning if the application
- * wants to set the alexa_config_t via the companion app. The cb_user_data in conn_mgr_prov_t must also be 
- * set to an allocated alexa_config_t struct pointer.
+ * This API must be called in the application after wifi_init() but before wifi_mgr_prov_init().
+ * This internally adds the endpoint for Alexa for provisioning.
  *
+ * @param[in] user_data pointer to the voice assistant configuration.
  */
-int alexa_conn_mgr_prov_cb(void *user_data, conn_mgr_cb_event_t event);
+esp_err_t alexa_provisioning_init(void *user_data);
+
+/* For internal use */
 int avs_config_data_handler(uint32_t session_id, const uint8_t *inbuf, ssize_t inlen, uint8_t **outbuf, ssize_t *outlen, void *priv_data);
 
 #endif /* _AVS_CONFIG_H_ */

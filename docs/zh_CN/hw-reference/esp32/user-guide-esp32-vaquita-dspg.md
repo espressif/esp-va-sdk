@@ -90,7 +90,7 @@ ESP32-Vaquita-DSPG 为用户提供了便捷、安全、高性价比的方式开�
 
 ### 1.4.3 软件设置
 
-本款开发板可支持多种应用场景，其中最主要的应用场景是亚马逊物联网平台 (AWS IoT) 的 Alexa 语音服务（Alexa Voice Service，简称 AVS）。您可下载乐鑫的 [ESP AVS for AWS IoT](https://github.com/espressif/esp-va-sdk/tree/feature/aia-beta)，参考[使用指南](https://github.com/espressif/esp-va-sdk/blob/feature/aia-beta/README.md)。
+本款开发板可支持多种应用场景，其中最主要的应用场景是亚马逊物联网平台 (AWS IoT) 的 Alexa 语音服务（Alexa Voice Service，简称 AVS）。您可下载乐鑫的 [ESP AVS for AWS IoT](https://github.com/espressif/esp-va-sdk/)，参考[使用指南](https://github.com/espressif/esp-va-sdk/blob/master/README.md)。
 
 # 2. 硬件参考
 

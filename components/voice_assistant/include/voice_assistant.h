@@ -7,6 +7,8 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
+#define NVS_BT_ONLY_MODE "bt-only-mode"
+
 /** Get current Voice Assistant SDK version
  *
  * \return Pointer to version string
@@ -49,7 +51,9 @@ void va_button_resume();
 /**
  * API to reset the Voice Assistant.
  * This can be called before rebooting the device.
+ *
+ * @param[in] factory_reset Set this to true if the reset is because of a factory reset.
  */
-void va_reset();
+void va_reset(bool factory_reset);
 
 #endif /*_VOICE_ASSISTANT_H_ */

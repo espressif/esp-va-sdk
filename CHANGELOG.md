@@ -1,4 +1,53 @@
-## ChangeLog
+# ChangeLog
+
+## v2.0 - 2021-09-27
+
+### Enhancements:
+*	All the 4 supported voice assistants together
+*	Additional components for examples
+	*	ESP RainMaker
+	*	Custom Player
+	*	Smart home (only for AIA)
+	*	Equalizer (only for AVS)
+* 	Additional audio boards supported
+	*	esp32_vaquita_dspg
+	*	esp_eye
+	*	hollow
+	*	m5_core2
+*	Easier to integrate and add support for custom boards
+*	Adding hollow board and other hollow components
+* 	Changed IDF version to v4.2
+* 	CMake builds are supported and are default
+*	Diagnostics improvements
+	*	Socket dump cli
+	*	RSSI prints
+	*	Network speed prints
+	*	Ping prints
+*	Support for other UI elements with va_ui
+*	avs: Alexa 3.0 support
+*	Security level 1 in local control
+*	Prompts support
+
+### API Changes:
+* 	IDF version change to v4.2
+*	AIA uses esp-mqtt instead of aws_iot as the MQTT client
+*	Audio Hal restructuring and removed the older board_support_pkgs
+*	Support for alexa_early_init()
+*	Addition of examples/common/ to support provisioning and wifi configuration
+
+### Bug Fixes:
+*	Fixed memory leaks in va_nvs
+*	Linking fixes and Reverse dependency fixes while compiling
+*	Stability and certification fixes
+*	Various internal bugfixes
+
+### Known Issues:
+*	There is a memory leak in GVA and Dialogflow examples on every query
+*	Only Classic Bluetooth Sink is supported in AVS
+
+
+<br><br><br>
+<hr>
 
 ### 1.2-RC1 - 2019-11-13
 

@@ -3,8 +3,17 @@
 
 #pragma once
 #include <alexa.h>
+#include <protocomm.h>
 
-esp_err_t alexa_local_config_start(alexa_config_t *va_cfg, const char *service_name);
+/**
+ * The Amazon Alexa Configuration Structure
+ */
+typedef struct {
+    char *device_serial_num;
+    char *product_id;
+} amazon_config_t;
+
+esp_err_t alexa_local_config_start(amazon_config_t *va_cfg, const char *service_name);
 esp_err_t alexa_local_config_stop();
 esp_err_t alexa_local_config_set_name(const char *new_name);
 const char *alexa_local_config_get_name();

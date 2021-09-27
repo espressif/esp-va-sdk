@@ -8,16 +8,20 @@
 #include <esp_event_loop.h>
 #include <esp_pm.h>
 #include <nvs_flash.h>
+#include <string.h>
 
 #include <voice_assistant.h>
 #include <dialogflow.h>
 
 #include <va_mem_utils.h>
+#include <va_ui.h>
+#include <va_button.h>
+#include <va_led.h>
 #include <scli.h>
 #include <va_diag_cli.h>
 #include <wifi_cli.h>
-#include <media_hal.h>
 #include <tone.h>
+#include <speaker.h>
 #include <auth_delegate.h>
 #include <speech_recognizer.h>
 #include <va_board.h>
@@ -81,17 +85,6 @@ static void wifi_init_sta()
     ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
 }
 
-#define MEDIA_HAL_DEFAULT()     \
-    {   \
-        .op_mode    = MEDIA_HAL_MODE_SLAVE,              \
-        .adc_input  = MEDIA_HAL_ADC_INPUT_LINE1,         \
-        .dac_output = MEDIA_HAL_DAC_OUTPUT_ALL,          \
-        .codec_mode = MEDIA_HAL_CODEC_MODE_BOTH,         \
-        .bit_length = MEDIA_HAL_BIT_LENGTH_16BITS,       \
-        .format     = MEDIA_HAL_I2S_NORMAL,              \
-        .port_num = 0,                          \
-    };
-
 void app_main()
 {
     ESP_LOGI(TAG, "==== Voice Assistant SDK version: %s ====", va_get_sdk_version());
@@ -111,18 +104,18 @@ void app_main()
     }
     ESP_ERROR_CHECK( ret );
 
-    va_board_init();
-    static media_hal_config_t media_hal_conf = MEDIA_HAL_DEFAULT();
-    media_hal_init(&media_hal_conf);
+    va_board_init(); /* Initialize media_hal, media_hal_playback, board buttons and led patters */
+    va_button_init();
+    va_led_init();
 
-    va_board_button_init();
-    va_board_led_init();
+    scli_init(); /* Initialize CLI */
+    va_diag_register_cli(); /* Add diagnostic functions to CLI */
+    speaker_diag_register_cli(); /* Add CLI cmds for vol +/- */
 
-    scli_init();
-    va_diag_register_cli();
     wifi_register_cli();
     cm_event_group = xEventGroupCreate();
 
+    adc_power_acquire();
     tcpip_adapter_init();
     ESP_ERROR_CHECK(esp_event_loop_init(event_handler, NULL) );
 
@@ -132,13 +125,11 @@ void app_main()
         abort();
     }
     if (!provisioning_state) {
-        va_led_set(LED_RESET);
-        ESP_LOGI(TAG, "***************************");
-        ESP_LOGI(TAG, "** Starting provisioning **");
-        ESP_LOGI(TAG, "***************************");
-        ESP_LOGI(TAG, "Refer the README-Dialogflow.md and enter the CLI commands. Make sure to enter the nvs-set commands first and then the wifi-set command.");
+        va_ui_set_state(VA_UI_RESET);
+        ESP_LOGI(TAG, "********** Starting provisioning **********");
+        ESP_LOGI(TAG, "Refer the readme in the example and enter the CLI commands. Make sure to enter the nvs-set commands first and then the wifi-set command.");
     } else {
-        va_led_set(VA_CAN_START);
+        va_ui_set_state(VA_UI_CAN_START);
         ESP_LOGI(TAG, "Already provisioned, starting station");
         wifi_init_sta();
     }
@@ -146,7 +137,7 @@ void app_main()
     xEventGroupWaitBits(cm_event_group, CONNECTED_BIT, false, true, portMAX_DELAY);
 
     if (!provisioning_state) {
-        va_led_set(VA_CAN_START);
+        va_ui_set_state(VA_UI_CAN_START);
     }
 
     va_cfg->device_config.project_name = "project-name-default";    // Enter your dialogflow project name here.
@@ -156,6 +147,7 @@ void app_main()
         while(1) vTaskDelay(2);
     }
     /* This is a blocking call */
-    va_dsp_init(speech_recognizer_recognize, speech_recognizer_record);
+    va_dsp_init(speech_recognizer_recognize, speech_recognizer_record, va_button_notify_mute);
+    va_boot_dsp_signal();
     return;
 }

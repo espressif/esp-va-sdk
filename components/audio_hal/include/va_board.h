@@ -24,22 +24,11 @@
 #ifndef __VA_BOARD_H__
 #define __VA_BOARD_H__
 
-#include <esp_types.h>
-
-#include <driver/i2c.h>
-#include <driver/i2s.h>
-#include <va_button.h>
-#include <va_led.h>
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 int va_board_init();
-
-esp_err_t va_board_button_init();
-
-esp_err_t va_board_led_init();
 
 #ifdef __cplusplus
 }

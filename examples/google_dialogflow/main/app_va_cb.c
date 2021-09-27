@@ -2,8 +2,11 @@
 // All rights reserved.
 
 #include "stdio.h"
-#include <va_led.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <va_ui.h>
 #include <voice_assistant_app_cb.h>
+#include "va_led.h"
 #include "va_board.h"
 #include <media_hal.h>
 #include "esp_log.h"
@@ -19,10 +22,21 @@ static inline int heap_caps_get_free_size_sram()
     return heap_caps_get_free_size(MALLOC_CAP_8BIT) - heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
 }
 
+void va_app_device_ready()
+{
+    static bool device_ready = false;
+    if (!device_ready) {
+        va_ui_set_state(VA_UI_OFF);
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+        va_ui_set_state(VA_IDLE);
+        device_ready = true;
+    }
+}
+
 void va_app_dialog_states(va_dialog_states_t va_state)
 {
     if(prv_led_state != va_state) {
-        va_led_set(va_state);
+        va_ui_set_state(va_state);
         ESP_LOGI(TAG, "Dialog state is: %d", va_state);
     }
     prv_led_state = va_state;
@@ -31,16 +45,16 @@ void va_app_dialog_states(va_dialog_states_t va_state)
 int va_app_volume_is_set(int vol)
 {
     volume_to_set = vol;
-    va_led_set(VA_SET_VOLUME);
-    va_led_set(VA_SET_VOLUME_DONE);
+    va_ui_set_state(VA_SET_VOLUME);
+    va_ui_set_state(VA_SET_VOLUME_DONE);
     return 0;
 }
 
 int va_app_mute_is_set(va_mute_state_t va_mute_state)
 {
     if (va_mute_state == VA_MUTE_ENABLE) {
-        va_led_set(VA_SPEAKER_MUTE_ENABLE);
-        va_led_set(VA_SET_VOLUME_DONE);
+        va_ui_set_state(VA_SPEAKER_MUTE_ENABLE);
+        va_ui_set_state(VA_SET_VOLUME_DONE);
     } else {
         //do nothing
     }

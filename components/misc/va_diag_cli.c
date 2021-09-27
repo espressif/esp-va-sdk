@@ -34,6 +34,7 @@
 #include <diag_cli.h>
 #include <voice_assistant.h>
 
+
 static const char *TAG = "[va_diag_cli]";
 
 static void hex_dump(uint8_t *data, int length)
@@ -155,7 +156,7 @@ static int reboot_cli_handler(int argc, char *argv[])
 {
     /* Just to go to the next line */
     printf("\n");
-    va_reset();
+    va_reset(false);
     esp_restart();
     return 0;
 }
@@ -171,6 +172,34 @@ static int crash_cli_handler(int argc, char *argv[])
     printf("%c\n", b);
     return 0;
 }
+
+#ifdef VOICE_ASSISTANT_AVS
+#include "alexa.h"
+
+#if CONFIG_BT_ENABLED && !CONFIG_BTDM_CONTROLLER_MODE_BLE_ONLY
+static int set_bt_only_cli_handler(int argc, char *argv[])
+{
+    /* Just to go to the next line */
+    printf("\n");
+    if (argc < 2) {
+        printf("Invalid arguments");
+        return ESP_FAIL;
+    }
+
+    if (argv[1][0] - '0') {
+        if (alexa_enable_bt_only_mode()) {
+            ESP_LOGE(TAG, "Failed to enable bt only mode");
+        }
+    } else {
+        if (alexa_disable_bt_only_mode() != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to disable bt only mode");
+        }
+    }
+
+    return 0;
+}
+#endif
+#endif
 
 static esp_console_cmd_t diag_cmds[] = {
     {
@@ -193,6 +222,13 @@ static esp_console_cmd_t diag_cmds[] = {
         .help = " ",
         .func = reboot_cli_handler,
     },
+#if CONFIG_BT_ENABLED && !CONFIG_BTDM_CONTROLLER_MODE_BLE_ONLY
+    {
+        .command = "bt-only",
+        .help = "Switch to BT only mode",
+        .func = set_bt_only_cli_handler,
+    },
+#endif
     {
         .command = "crash",
         .help = " ",

@@ -53,6 +53,15 @@ enum event_type {
     AP_NOTIFY_DELAY_ELAPSED,
 };
 
+/** Initialise audio player
+ *
+ * This API initialises the audio_player if not already done.
+ * This API needs to be called before calling any other audio_player APIs.
+ *
+ * @return int, 0--success, others--fail
+ */
+int audio_player_init();
+
 /** Add a Song to be played by the audio_player
  *
  * \param[in] url               url of the song to be played

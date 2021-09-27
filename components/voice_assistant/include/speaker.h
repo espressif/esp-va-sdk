@@ -58,4 +58,11 @@ int speaker_set_mute(bool mute);
  */
 bool speaker_get_mute();
 
+/**
+ * @brief   register speaker diagnostic CLI
+ *
+ *          Adds CLI options for volume set/up/down
+ */
+void speaker_diag_register_cli();
+
 #endif /* _SPEAKER_H_ */

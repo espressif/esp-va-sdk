@@ -26,7 +26,7 @@
 #define _HTTP_PLAYLIST_H_
 
 #include <unistd.h>
-#include <rom/queue.h>
+#include <sys/queue.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -34,25 +34,52 @@ extern "C" {
 
 typedef struct playlist_entry_s playlist_entry_t;
 
+/**
+ * Playlist entry.
+ */
 struct  playlist_entry_s {
-    char *uri;
+    char *uri; /* uri of the entry */
+    bool is_played; /* flag to signal if this entry is played */
     STAILQ_ENTRY(playlist_entry_s) entries;
 };
 
+/**
+ * http playlist to hold urls.
+ */
 typedef struct http_playlist {
-    int total_entries;
+    char *host_uri; /* host uri of playlist */
+    int total_entries; /* number of entries in playlist */
+    bool is_complete; /* to signal if parsing was complete */
     STAILQ_HEAD(stailqhead, playlist_entry_s) head;
 } http_playlist_t;
 
-esp_err_t playlist_add_entry(http_playlist_t *playlist, char *line, const char *host_url);
+/**
+ * Add new entry to playlist.
+ *
+ * Function checks if the url is already present in playlist and inserts if not present.
+ * playlist: playlist to which entry is to be added.
+ * line    : uri to be inserted in playlist
+ * host_uri: host uri for creating urls in case of `line` is relative or schemeless uri
+ */
+esp_err_t playlist_add_entry(http_playlist_t *playlist, char *line, const char *host_uri);
+
+/**
+ * Remove and free all the entries in the playlist.
+ */
 esp_err_t playlist_free(http_playlist_t *playlist);
+
+/**
+ * Get first not played url from the playlist.
+ */
 char *playlist_get_next_entry(http_playlist_t *playlist);
 
+/**
+ * Connect to uri in the playlist and start reading data in `buf` of size `len`
+ */
 int http_playlist_read_data(void *base_stream, void *buf, ssize_t len);
 
 #ifdef __cplusplus
 }
 #endif
-
 
 #endif /* _HTTP_PLAYLIST_H_ */

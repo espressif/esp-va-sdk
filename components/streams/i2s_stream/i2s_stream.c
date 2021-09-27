@@ -42,19 +42,10 @@
 
 static esp_err_t parse_i2s_config(void *base_stream)
 {
-    esp_err_t ret;
+    esp_err_t ret = ESP_OK;
     i2s_stream_t *stream = (i2s_stream_t *) base_stream;
     i2s_stream_config_t *cfg = &stream->cfg;
 
-    ret = i2s_driver_install(cfg->i2s_num, &cfg->i2s_config, 0, NULL);
-    ESP_LOGI(I2STAG, ".......................Init i2s stream...............\n");
-    if (ret != ESP_OK) {
-        ESP_LOGE(I2STAG, "Error installing i2s driver for stream %s", stream->base.label);
-    } else {
-        i2s_pin_config_t pf_i2s_pin = {0};
-        audio_board_i2s_pin_config(cfg->i2s_num, &pf_i2s_pin);
-        i2s_set_pin(cfg->i2s_num, &pf_i2s_pin);
-    }
     i2s_zero_dma_buffer(cfg->i2s_num);
 
     return ESP_OK;

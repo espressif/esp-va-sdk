@@ -35,8 +35,10 @@
 #include <http_playlist.h>
 #include <esp_audio_mem.h>
 #include <string.h>
+#include <m3u8_parser.h>
 
 #define TAG   "HTTP_PLAYLIST"
+#define MAX_PLAYLIST_KEEP_TRACKS 8
 
 esp_err_t playlist_add_entry(http_playlist_t *playlist, char *line, const char *host_url)
 {
@@ -58,14 +60,18 @@ esp_err_t playlist_add_entry(http_playlist_t *playlist, char *line, const char *
                 goto add_entry_err2;
             }
             pos[1] = 0;
-            asprintf(&(new->uri), "%s%s", tmp_str, line);
+            size_t uri_len = strlen(tmp_str) + strlen(line) + 1;
+            new->uri = esp_audio_mem_calloc(1, uri_len);
+            snprintf(new->uri, uri_len, "%s%s", tmp_str, line);
         } else { //Relative URI
             char *pos = strrchr(tmp_str, '/'); //Search for last "/"
             if (!pos) { //'/' not found case
                 goto add_entry_err2;
             }
             pos[1] = 0;
-            asprintf(&(new->uri), "%s%s", tmp_str, line);
+            size_t uri_len = strlen(tmp_str) + strlen(line) + 1;
+            new->uri = esp_audio_mem_calloc(1, uri_len);
+            snprintf(new->uri, uri_len, "%s%s", tmp_str, line);
         }
         free(tmp_str);
     } else {
@@ -75,13 +81,14 @@ esp_err_t playlist_add_entry(http_playlist_t *playlist, char *line, const char *
     playlist_entry_t *find = NULL;
     STAILQ_FOREACH(find, &playlist->head, entries) {
         if (strcmp(find->uri, new->uri) == 0) {
-            ESP_LOGW(TAG, "URI exist");
-            free(new->uri);
+            ESP_LOGD(TAG, "URI exists");
+            esp_audio_mem_free(new->uri);
             free(new);
             return ESP_OK;
         }
     }
 
+    new->is_played = false;
     STAILQ_INSERT_TAIL(&playlist->head, new, entries);
     playlist->total_entries++;
     return ESP_OK;
@@ -99,8 +106,12 @@ esp_err_t playlist_free(http_playlist_t *playlist)
     }
     playlist_entry_t *datap, *temp;
     STAILQ_FOREACH_SAFE(datap, &playlist->head, entries, temp) {
-        free(datap->uri);
+        esp_audio_mem_free(datap->uri);
         free(datap);
+    }
+    if (playlist->host_uri) {
+        free(playlist->host_uri);
+        playlist->host_uri = NULL;
     }
     free(playlist);
     return ESP_OK;
@@ -111,18 +122,29 @@ char *playlist_get_next_entry(http_playlist_t *playlist)
     if (!playlist) {
         return NULL;
     }
-    playlist_entry_t *temp = NULL;
-    char *uri;
-    temp = STAILQ_FIRST(&playlist->head);
-    if (temp == NULL) {
-        ESP_LOGI(TAG, "No elements in list");
-        return NULL;
+
+    playlist_entry_t *entry;
+    char *uri = NULL;
+
+    /* Find not played entry. */
+    STAILQ_FOREACH(entry, &playlist->head, entries) {
+        if (!entry->is_played) {
+            entry->is_played = true;
+            uri = strdup(entry->uri);
+            break;
+        }
     }
 
-    uri = temp->uri;
-
-    STAILQ_REMOVE_HEAD(&playlist->head, entries);
-    free(temp);
+    if (uri) {
+        /* Remove head entry if total_entries are > MAX_PLAYLIST_KEEP_TRACKS */
+        if (playlist->total_entries > MAX_PLAYLIST_KEEP_TRACKS) {
+            playlist_entry_t *tmp = STAILQ_FIRST(&playlist->head);
+            STAILQ_REMOVE_HEAD(&playlist->head, entries);
+            esp_audio_mem_free(tmp->uri);
+            free(tmp);
+            playlist->total_entries--;
+        }
+    }
 
     return uri;
 }
@@ -138,13 +160,46 @@ int http_playlist_read_data(void *base_stream, void *buf, ssize_t len)
         while (data_read == 0) {
             char *url = playlist_get_next_entry(playlist);
             if (!url) { /* playlist is empty! */
-                playlist_free(playlist);
-                bstream->hls_cfg.media_playlist = NULL;
-                return ESP_FAIL;
+                while (bstream->base._run && !playlist->is_complete) { /* fetch again if playlist is not complete */
+                    ESP_LOGI(TAG, "Fetching again...");
+                    free(bstream->cfg.url);
+                    bstream->cfg.url = playlist->host_uri;
+                    playlist->host_uri = NULL;
+                    http_request_delete(bstream->handle);
+                    http_connection_delete(bstream->handle);
+                    bstream->handle = NULL;
+                    if (http_playback_stream_create_or_renew_session(bstream) == ESP_FAIL) {
+                        ESP_LOGE(TAG, "Failed to create connection to %s. line %d", bstream->cfg.url, __LINE__);
+                        return ESP_FAIL;
+                    }
+                    playlist = m3u8_parse(bstream->handle, playlist, bstream->cfg.url, NULL);
+                    url = playlist_get_next_entry(playlist);
+                    if (!url && bstream->base._run) {
+                        /**
+                         * This `small` delay is very important or else we will keep trying tirelessly.
+                         * In case all URLs are duplicate, we will eat up too much CPU in vain.
+                         * We have already downloaded previous playlist and this one has no new URLs yet.
+                         */
+                        vTaskDelay(1000 / portTICK_PERIOD_MS);
+                    } else {
+                        break;
+                    }
+                };
+
+                if (!url) { /* still no url */
+                    if (playlist) {
+                        playlist_free(bstream->hls_cfg.media_playlist);
+                        bstream->hls_cfg.media_playlist = NULL;
+                    }
+                    return ESP_FAIL;
+                }
             }
+
             http_request_delete(bstream->handle);
             ret = http_request_new(bstream->handle, ESP_HTTP_GET, url);
-            free(url); /* url freed */
+            esp_audio_mem_free(bstream->cfg.url); /* free old url */
+            bstream->cfg.url = url; /* keep current url in cfg */
+
             if (ret < 0) {
                 goto error1;
             }

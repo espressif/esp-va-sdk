@@ -27,11 +27,25 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 
+#include <media_hal_playback.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 #define MEDIA_HAL_VOL_DEFAULT 60
+
+/* Default config for media_hal_config_t */
+#define MEDIA_HAL_DEFAULT()     \
+    {   \
+        .op_mode    = MEDIA_HAL_MODE_SLAVE,              \
+        .adc_input  = MEDIA_HAL_ADC_INPUT_LINE1,         \
+        .dac_output = MEDIA_HAL_DAC_OUTPUT_ALL,          \
+        .codec_mode = MEDIA_HAL_CODEC_MODE_BOTH,         \
+        .bit_length = MEDIA_HAL_BIT_LENGTH_16BITS,       \
+        .format     = MEDIA_HAL_I2S_NORMAL,              \
+        .port_num = 0,                          \
+    };
 
 /**
  * @brief Select media hal codec mode
@@ -152,11 +166,12 @@ typedef  struct {
 /**
  * @brief Initialize media codec driver
  *
- * @praram media_hal_conf Configure structure media_hal_config_t
+ * @param media_hal_cfg Configure structure media_hal_config_t
+ * @param media_hal_playback_cfg Configure structure media_hal_playback_config_t
  *
  * @return  media_hal_t* - success, otherwise NULL
  */
-media_hal_t* media_hal_init(media_hal_config_t *media_hal_conf);
+media_hal_t* media_hal_init(media_hal_config_t *media_hal_cfg, media_hal_playback_cfg_t *media_hal_playback_cfg);
 
 /**
  * @brief Returns first initialized media_hal_t structure

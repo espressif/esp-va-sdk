@@ -43,21 +43,12 @@ typedef enum {
     CODEC_TYPE_OPUS_DECODER,
     CODEC_TYPE_AMR_DECODER,
     CODEC_TYPE_WAV_DECODER,
+    CODEC_TYPE_DEC_MAX, /* Next we start encoder */
     CODEC_TYPE_AMR_ENCODER,
     CODEC_TYPE_FLAC_ENCODER,
-    CODEC_TYPE_OPUS_ENCODER
+    CODEC_TYPE_OPUS_ENCODER,
+    CODEC_TYPE_MAX
 } audio_codec_type_t;
-
-/* Audio type */
-typedef enum {
-    AUDIO_TYPE_UNKNOWN,
-    AUDIO_TYPE_WAV,
-    AUDIO_TYPE_AMRNB,
-    AUDIO_TYPE_AMRWB,
-    AUDIO_TYPE_M4A,
-    AUDIO_TYPE_AAC,
-    AUDIO_TYPE_TSAAC
-} audio_type_t;
 
 typedef enum {
     CODEC_STATE_INIT = 1,
@@ -101,6 +92,7 @@ typedef struct audio_codec_cfg {
     esp_err_t (*codec_process)(audio_codec_t *codec);
     esp_err_t (*codec_stop)(audio_codec_t *codec);
     esp_err_t (*codec_close)(audio_codec_t *codec);
+    esp_err_t (*codec_set_offset)(audio_codec_t *codec, int offset);
 
     uint32_t input_wait_ticks;
     uint32_t output_wait_ticks;
@@ -132,16 +124,47 @@ void audio_codec_generate_event(audio_codec_t *codec, audio_codec_event_t event,
 
 /* API for higher layer players or apps */
 esp_err_t audio_codec_init(audio_codec_t *codec, const char *label, audio_io_fn_arg_t *codec_input,
-                            audio_io_fn_arg_t *codec_output, audio_event_fn_arg_t *event_func);
+                           audio_io_fn_arg_t *codec_output, audio_event_fn_arg_t *event_func);
 
 esp_err_t audio_codec_modify_input_cb(audio_codec_t *codec, audio_io_fn_arg_t *codec_input);
 audio_codec_type_t audio_codec_get_identifier(audio_codec_t *codec);
 
+/**
+ * Start the codec.
+ *
+ * Runs a decoder/encoder with specified configs.
+ */
 esp_err_t audio_codec_start(audio_codec_t *codec);
+
+/**
+ * @brief   stop the codec.
+ */
 esp_err_t audio_codec_stop(audio_codec_t *codec);
+
+/**
+ * @brief   pause the codec.
+ *
+ * @note    there are better ways to pause running player.
+ *          pause the i2s stream instead.
+ */
 esp_err_t audio_codec_pause(audio_codec_t *codec);
+
+/**
+ * @brief   resume the codec.
+ */
 esp_err_t audio_codec_resume(audio_codec_t *codec);
+
+/**
+ *  @brief  destry the codec.
+ *          This destroys running task for a codec
+ */
 esp_err_t audio_codec_destroy(audio_codec_t *codec);
+
+/**
+ * Set offset in ms to codec to play data from.
+ * Decoder will simply skip all the decoded samples for first `offset_in_ms` milliseconds.
+ */
+esp_err_t audio_codec_set_offset(audio_codec_t *codec, int offset_in_ms);
 
 #ifdef __cplusplus
 }

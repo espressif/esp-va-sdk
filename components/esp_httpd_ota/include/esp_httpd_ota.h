@@ -4,7 +4,7 @@
 #ifndef _ESP_HTTPD_OTA_
 #define _ESP_HTTPD_OTA_
 
-#include <http_server.h>
+#include <esp_http_server.h>
 
 typedef enum {
     /* Before the OTA update has started */

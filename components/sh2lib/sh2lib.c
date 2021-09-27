@@ -16,6 +16,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <errno.h>
 #include <string.h>
 #include <unistd.h>
 #include <ctype.h>
@@ -40,7 +41,7 @@ static ssize_t callback_send_inner(struct sh2lib_handle *hd, const uint8_t *data
 {
     int rv = esp_tls_conn_write(hd->http2_tls, data, length);
     if (rv <= 0) {
-        if (rv == MBEDTLS_ERR_SSL_WANT_WRITE || rv == MBEDTLS_ERR_SSL_WANT_READ) {
+        if (rv == MBEDTLS_ERR_SSL_WANT_WRITE || rv == MBEDTLS_ERR_SSL_WANT_READ || errno == EAGAIN) {
             rv = NGHTTP2_ERR_WOULDBLOCK;
         } else {
             rv = NGHTTP2_ERR_CALLBACK_FAILURE;
@@ -92,7 +93,7 @@ static ssize_t callback_recv(nghttp2_session *session, uint8_t *buf,
     int rv;
     rv = esp_tls_conn_read(hd->http2_tls, buf, (int)length);
     if (rv < 0) {
-        if (rv == MBEDTLS_ERR_SSL_WANT_WRITE || rv == MBEDTLS_ERR_SSL_WANT_READ) {
+        if (rv == MBEDTLS_ERR_SSL_WANT_WRITE || rv == MBEDTLS_ERR_SSL_WANT_READ || errno == EAGAIN) {
             rv = NGHTTP2_ERR_WOULDBLOCK;
         } else {
             rv = NGHTTP2_ERR_CALLBACK_FAILURE;
@@ -370,4 +371,12 @@ int sh2lib_do_post(struct sh2lib_handle *hd, const char *path, const char *token
                                SH2LIB_MAKE_NV("content-type", content_type),
                              };
     return sh2lib_do_putpost_with_nv(hd, nva, sizeof(nva) / sizeof(nva[0]), data_prd, arg);
+}
+
+int sh2lib_set_qos_vo(struct sh2lib_handle *hd)
+{
+    const int ip_precedence_vo = 4;
+    const int ip_precedence_offset = 5;
+    int priority = (ip_precedence_vo << ip_precedence_offset);
+    return setsockopt(hd->http2_tls->sockfd, IPPROTO_IP, IP_TOS, &priority, sizeof(priority));
 }
