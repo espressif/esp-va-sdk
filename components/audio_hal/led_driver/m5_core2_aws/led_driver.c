@@ -9,7 +9,7 @@
 #define DEFAULT_NUM_OF_LEDS 10
 #define DEFAULT_LEDS_IN_SET 5
 
-static const char *TAG = "led_driver_m5_core2";
+static const char *TAG = "led_driver_m5_core2_aws";
 
 static bool is_init_done = false;
 static int num_of_leds = 0;
@@ -33,8 +33,7 @@ esp_err_t led_driver_init(led_driver_config_t *led_driver_config)
 {
     ESP_LOGI(TAG, "Initialising led driver");
 
-    Core2ForAWS_Sk6812_Init();
-    Core2ForAWS_LED_Enable(1);
+    /* M5_Core2_AWS specific LED driver is already initalized in Core2ForAWS_Init() */
 
     if (led_driver_config && led_driver_config->num_of_leds > 0) {
         num_of_leds = led_driver_config->num_of_leds;

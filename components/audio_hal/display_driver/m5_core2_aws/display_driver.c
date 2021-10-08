@@ -7,13 +7,13 @@
 
 #include <display_driver.h>
 
-#define TAG "display_driver_m5_core2"
+#define TAG "display_driver_m5_core2_aws"
 
 extern SemaphoreHandle_t xGuiSemaphore;
 
 static void brightness_slider_event_cb(lv_obj_t * slider, lv_event_t event) {
     if(event == LV_EVENT_VALUE_CHANGED) {
-        Core2ForAWS_LCD_SetBrightness(lv_slider_get_value(slider));
+        Core2ForAWS_Display_SetBrightness(lv_slider_get_value(slider));
     }
 }
 
@@ -43,12 +43,8 @@ void display_function()
 
 esp_err_t display_driver_init()
 {
-    ESP_LOGI(TAG, "Initialising touch driver");
-    /* Touch Driver. This is for slider as well as buttons */
-    FT6336U_Init();
+    /* M5_Core2_AWS specific Touch and display drivers are already initalized in Core2ForAWS_Init() */
 
-    ESP_LOGI(TAG, "Initialising display driver");
-    Core2ForAWS_LCD_Init();
     display_function();
 
     return ESP_OK;

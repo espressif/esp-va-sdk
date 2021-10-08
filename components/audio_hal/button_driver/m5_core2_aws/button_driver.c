@@ -7,7 +7,7 @@
 #include <core2forAWS.h>
 #include <button_driver.h>
 
-#define TAG "button_driver_m5_core2"
+#define TAG "button_driver_m5_core2_aws"
 
 #define BUTTON_LEFT     (((int64_t)1) << 0)
 #define BUTTON_MIDDLE   (((int64_t)1) << 1)
@@ -18,7 +18,7 @@ static bool enable_debug = false;
 static int current_button_value = 0;
 static button_driver_config_t button_config;
 
-static esp_err_t button_driver_m5_core2_init()
+static esp_err_t button_driver_m5_core2_aws_init()
 {
     /* Initialize the driver */
 	Core2ForAWS_Button_Init();
@@ -107,8 +107,7 @@ esp_err_t button_driver_init(button_driver_config_t *button_driver_config)
     /* Copy the button configuration */
     memcpy(&button_config, button_driver_config, sizeof(button_driver_config_t));
 
-    /* Initialize the buttons */
-    button_driver_m5_core2_init();
+    /* M5_Core2_AWS specific Buttons driver is already initalized in Core2ForAWS_Init() */
 
     is_init_done = true;
     return ESP_OK;

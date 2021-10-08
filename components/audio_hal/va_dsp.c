@@ -391,13 +391,15 @@ void va_dsp_init(va_dsp_recognize_cb_t va_dsp_recognize_cb, va_dsp_record_cb_t v
         return;
     }
 
-    va_dsp_hal_init(va_dsp_data.cmd_queue);
-
 #ifdef CONFIG_HALF_DUPLEX_I2S_MODE
+    /* First set I2S into Mic mode and then start audio stream, otherwise it fails in i2c_read RX NULL loop */
     if (!va_dsp_data.first_playback_starting) {
         audio_board_i2s_set_spk_mic_mode(MODE_MIC);
     }
 #endif
+
+    va_dsp_hal_init(va_dsp_data.cmd_queue);
+
 #ifdef CONFIG_PM_ENABLE
     esp_pm_lock_create(ESP_PM_APB_FREQ_MAX, 0, "Playback Lock", &playback_pm);
     esp_timer_create_args_t timer_arg = {
